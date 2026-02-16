@@ -519,12 +519,30 @@ export const DRE: React.FC<DREProps> = ({ bills, revenues, accounts, setRevenues
                     </div>
                   ))}
                   {showDetails.bills.map((bill, idx) => (
-                    <div key={`bill-${idx}`} className="flex items-center justify-between p-4 bg-slate-50 rounded-lg border border-slate-200 hover:bg-slate-100 transition-colors">
-                      <div className="flex-1">
-                        <p className="font-bold text-slate-800 text-sm">{bill.description}</p>
-                        <p className="text-xs text-slate-500 mt-1">{bill.accountName}</p>
+                    <div key={`bill-${idx}`} className="p-4 bg-slate-50 rounded-lg border border-slate-200 hover:bg-slate-100 transition-colors">
+                      <div className="flex items-center justify-between mb-2">
+                        <div>
+                          <p className="font-bold text-slate-800 text-sm">{bill.description}</p>
+                          <p className="text-xs text-slate-500 mt-1">{bill.accountName}</p>
+                        </div>
+                        <p className="font-black text-slate-800 text-lg">{fmt(bill.amount)}</p>
                       </div>
-                      <p className="font-black text-slate-800">{fmt(bill.amount)}</p>
+                      <div className="flex items-center gap-4 text-xs mt-3 pt-3 border-t border-slate-200">
+                        <div>
+                          <p className="text-slate-400 font-bold uppercase">Vencimento</p>
+                          <p className="text-slate-700 font-semibold">{new Date(bill.dueDate).toLocaleDateString('pt-BR')}</p>
+                        </div>
+                        <div>
+                          <p className="text-slate-400 font-bold uppercase">Pagamento</p>
+                          <p className="text-slate-700 font-semibold">{bill.paidDate ? new Date(bill.paidDate).toLocaleDateString('pt-BR') : '—'}</p>
+                        </div>
+                        <div className="ml-auto">
+                          <p className="text-slate-400 font-bold uppercase">Status</p>
+                          <p className={`text-xs font-black uppercase px-2 py-1 rounded ${bill.status === 'Pago' ? 'bg-emerald-100 text-emerald-700' : bill.status === 'Atrasado' ? 'bg-rose-100 text-rose-700' : 'bg-amber-100 text-amber-700'}`}>
+                            {bill.status}
+                          </p>
+                        </div>
+                      </div>
                     </div>
                   ))}
                 </div>
