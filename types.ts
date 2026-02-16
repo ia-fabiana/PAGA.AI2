@@ -84,6 +84,7 @@ export interface Bill {
   description: string;
   amount: number;
   dueDate: string;
+  paidDate?: string; // Data de pagamento - quando preenchida, conta é considerada paga
   status: BillStatus;
   recurrenceType: RecurrenceType;
   totalInstallments?: number;

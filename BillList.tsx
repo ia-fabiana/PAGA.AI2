@@ -1,7 +1,7 @@
 
 import React, { useState, useMemo } from 'react';
 import { Bill, Supplier, BillStatus, UserRole, ChartOfAccount } from './types';
-import { Search, Plus, FileDown, Edit2, Trash2, CheckCircle2, Repeat, Calendar, ListTree, User, AlertCircle } from 'lucide-react';
+import { Search, Plus, FileDown, Edit2, Trash2, Repeat, Calendar, ListTree, User, AlertCircle } from 'lucide-react';
 import { jsPDF } from 'jspdf';
 import 'jspdf-autotable';
 
@@ -137,6 +137,22 @@ export const BillList: React.FC<BillListProps> = ({ bills, suppliers, accounts, 
     setShowPdfPreview(true);
   };
 
+  const handlePaidDateChange = (billId: string, paidDate: string) => {
+    const bill = bills.find(b => b.id === billId);
+    if (!bill) return;
+    
+    if (paidDate) {
+      // Quando data de pagamento é preenchida, marca como PAID
+      onStatusChange(billId, BillStatus.PAID);
+      // Atualizar com a data de pagamento
+      onEdit({ ...bill, paidDate, status: BillStatus.PAID });
+    } else {
+      // Quando data de pagamento é limpa, volta ao status PENDING
+      onStatusChange(billId, BillStatus.PENDING);
+      onEdit({ ...bill, paidDate: undefined, status: BillStatus.PENDING });
+    }
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -219,13 +235,14 @@ export const BillList: React.FC<BillListProps> = ({ bills, suppliers, accounts, 
 
       <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse min-w-[800px]">
+          <table className="w-full text-left border-collapse min-w-[1000px]">
             <thead>
               <tr className="bg-slate-50 border-b border-slate-200">
                 <th className="px-6 py-4 text-sm font-semibold text-slate-500 uppercase tracking-wider">Descrição / Fornecedor</th>
                 <th className="px-6 py-4 text-sm font-semibold text-slate-500 uppercase tracking-wider text-center">Tipo</th>
                 <th className="px-6 py-4 text-sm font-semibold text-slate-500 uppercase tracking-wider">Plano de Contas</th>
                 <th className="px-6 py-4 text-sm font-semibold text-slate-500 uppercase tracking-wider">Vencimento</th>
+                <th className="px-6 py-4 text-sm font-semibold text-slate-500 uppercase tracking-wider">Data de Pagamento</th>
                 <th className="px-6 py-4 text-sm font-semibold text-slate-500 uppercase tracking-wider">Valor</th>
                 <th className="px-6 py-4 text-sm font-semibold text-slate-500 uppercase tracking-wider text-right">Ações</th>
               </tr>
@@ -271,17 +288,27 @@ export const BillList: React.FC<BillListProps> = ({ bills, suppliers, accounts, 
                       </div>
                     </td>
                     <td className="px-6 py-4">
+                      {canEdit ? (
+                        <input
+                          type="date"
+                          value={bill.paidDate || ''}
+                          onChange={(e) => handlePaidDateChange(bill.id, e.target.value)}
+                          className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none bg-white hover:border-slate-300 transition-colors"
+                          title="Preencha para marcar como pago"
+                        />
+                      ) : (
+                        <span className="text-sm text-slate-600">
+                          {bill.paidDate ? new Date(bill.paidDate).toLocaleDateString('pt-BR') : '—'}
+                        </span>
+                      )}
+                    </td>
+                    <td className="px-6 py-4">
                       <span className="font-semibold text-slate-800 text-sm">
                         {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(bill.amount)}
                       </span>
                     </td>
                     <td className="px-6 py-4 text-right">
                       <div className="flex items-center justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                        {canMarkPaid && bill.status !== BillStatus.PAID && (
-                          <button onClick={() => onStatusChange(bill.id, BillStatus.PAID)} className="p-2 text-emerald-600 hover:bg-emerald-50 rounded-lg transition-colors" title="Marcar como Pago">
-                            <CheckCircle2 size={18} />
-                          </button>
-                        )}
                         {canEdit && (
                           <button 
                             onClick={() => onToggleEstimate(bill.id)} 
