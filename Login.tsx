@@ -1,6 +1,6 @@
 
 import React, { useState } from 'react';
-import { auth, isMockMode } from '../firebase';
+import { auth, isMockMode } from './firebase';
 import { signInWithEmailAndPassword, createUserWithEmailAndPassword } from 'firebase/auth';
 import { Wallet, LogIn, Mail, Lock, Loader2, Sparkles, ShieldCheck, AlertCircle } from 'lucide-react';
 

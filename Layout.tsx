@@ -1,8 +1,8 @@
 
 import React from 'react';
 import { LayoutDashboard, Receipt, Users, ShieldCheck, Building2, Menu, X, Wallet, LogOut, ListTree, FilePieChart, Github, Zap, Shield } from 'lucide-react';
-import { TeamMember, Company } from '../types';
-import { auth } from '../firebase';
+import { TeamMember, Company } from './types';
+import { auth } from './firebase';
 
 interface LayoutProps {
   children: React.ReactNode;

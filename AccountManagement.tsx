@@ -1,6 +1,6 @@
 
 import React, { useState } from 'react';
-import { ChartOfAccount, AccountType, DreCategory } from '../types';
+import { ChartOfAccount, AccountType, DreCategory } from './types';
 import { 
   Plus, Edit2, Trash2, X, Save, Search, 
   CheckCircle, Settings2, PieChart

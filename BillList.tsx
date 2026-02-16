@@ -1,6 +1,6 @@
 
 import React, { useState, useMemo } from 'react';
-import { Bill, Supplier, BillStatus, UserRole, ChartOfAccount } from '../types';
+import { Bill, Supplier, BillStatus, UserRole, ChartOfAccount } from './types';
 import { Search, Plus, FileDown, Edit2, Trash2, CheckCircle2, Repeat, Calendar, ListTree, User } from 'lucide-react';
 import { jsPDF } from 'jspdf';
 import 'jspdf-autotable';

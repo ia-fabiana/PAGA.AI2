@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { Bill, Supplier, BillStatus, RecurrenceType, ChartOfAccount } from '../types';
+import { Bill, Supplier, BillStatus, RecurrenceType, ChartOfAccount } from './types';
 import { X, Calendar, DollarSign, Repeat, Layers, Check, ListTree, Plus, Trash2 } from 'lucide-react';
 
 interface BillFormProps {
