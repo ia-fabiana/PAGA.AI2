@@ -52,13 +52,16 @@ export const DRE: React.FC<DREProps> = ({ bills, revenues, accounts, setRevenues
 
   const getMonthDetails = (monthIndex: number, category: DreCategory | 'REVENUE' | 'GROSS_PROFIT' | 'NET_PROFIT', isEstimate = false) => {
     const monthBills = bills.filter(b => {
+      const isInMonth = getMonthIndex(b.dueDate) === monthIndex && getYearValue(b.dueDate) === currentYear;
+      if (!isInMonth) return false;
+      
       if (isEstimate) {
-        // Todas as despesas provisionadas, independente de status
-        if (!b.isEstimate) return false;
-      } else if (b.status !== BillStatus.PAID) {
-        return false;
+        // Despesas com vencimento no mês (estimadas + parcelas em aberto)
+        return b.isEstimate || (b.status !== BillStatus.PAID);
+      } else {
+        // Apenas bills pagos
+        return b.status === BillStatus.PAID;
       }
-      return getMonthIndex(b.dueDate) === monthIndex && getYearValue(b.dueDate) === currentYear;
     });
 
     const monthRevenues = revenues.filter(r => {
@@ -109,9 +112,12 @@ export const DRE: React.FC<DREProps> = ({ bills, revenues, accounts, setRevenues
       });
 
       const monthEstimateBills = bills.filter(b => {
-        // Todas as despesas provisionadas, independente de status
-        if (!b.isEstimate) return false;
-        return getMonthIndex(b.dueDate) === index && getYearValue(b.dueDate) === currentYear;
+        // Despesas com vencimento no mês (estimadas + parcelas em aberto)
+        const isInMonth = getMonthIndex(b.dueDate) === index && getYearValue(b.dueDate) === currentYear;
+        if (!isInMonth) return false;
+        
+        // Inclui: marcadas como estimate OU ainda não pagas (parcelas em aberto)
+        return b.isEstimate || (b.status !== BillStatus.PAID);
       });
 
       const getSum = (cat: DreCategory) => monthBills

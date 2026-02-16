@@ -86,6 +86,7 @@ export interface Bill {
   dueDate: string;
   paidDate?: string; // Data de pagamento - quando preenchida, conta é considerada paga
   romaneioWeek?: string; // Data do sábado da semana do romaneio (YYYY-MM-DD)
+  observations?: string; // Campo de observações/anotações
   status: BillStatus;
   recurrenceType: RecurrenceType;
   totalInstallments?: number;
