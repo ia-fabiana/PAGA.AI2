@@ -6,12 +6,13 @@ import { Wallet, LogIn, Mail, Lock, Loader2, Sparkles, ShieldCheck, AlertCircle 
 
 export const Login: React.FC = () => {
   const [email, setEmail] = useState('fabianajjvsf@gmail.com');
-  const [password, setPassword] = useState('');
+  const [password, setPassword] = useState('Paga@2026');
   const [loading, setLoading] = useState(false);
   const [isRegister, setIsRegister] = useState(false);
   const [error, setError] = useState('');
 
   const SUPER_ADMIN = 'fabianajjvsf@gmail.com';
+  const ADMIN_PASSWORD = 'Paga@2026';
 
   const handleDemoLogin = () => {
     setLoading(true);
@@ -48,11 +49,22 @@ export const Login: React.FC = () => {
     try {
       if (isRegister) {
         await createUserWithEmailAndPassword(auth, email, password);
+        console.log('✅ Conta criada com sucesso!');
       } else {
         await signInWithEmailAndPassword(auth, email, password);
       }
     } catch (err: any) {
-      setError('Falha na autenticação. Verifique os dados ou use o Modo Admin.');
+      if (err.code === 'auth/email-already-in-use') {
+        setError('Email já cadastrado. Tente outro ou faça login.');
+      } else if (err.code === 'auth/weak-password') {
+        setError('Senha muito fraca. Use no mínimo 6 caracteres.');
+      } else if (err.code === 'auth/user-not-found') {
+        setError('Usuário não encontrado. Crie uma conta primeiro.');
+      } else if (err.code === 'auth/wrong-password') {
+        setError('Senha incorreta.');
+      } else {
+        setError('Falha na autenticação. Verifique os dados.');
+      }
       console.error(err);
     } finally {
       setLoading(false);
@@ -126,7 +138,7 @@ export const Login: React.FC = () => {
             {(isMockMode || email === SUPER_ADMIN) && (
               <button 
                 type="button"
-                onClick={handleDemoLogin}
+                onClick={() => {handleDemoLogin(); console.log('Senha padrão: ' + ADMIN_PASSWORD);}}
                 className="w-full bg-indigo-600 text-white py-5 rounded-2xl font-black shadow-xl shadow-indigo-200 hover:bg-indigo-700 transition-all flex items-center justify-center gap-2 border-2 border-indigo-400"
               >
                 <ShieldCheck size={20} /> Acesso Rápido Admin

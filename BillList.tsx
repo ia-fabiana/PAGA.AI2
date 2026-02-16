@@ -15,14 +15,17 @@ interface BillListProps {
   onOpenForm: () => void;
   onToggleEstimate: (id: string) => void;
   userRole: UserRole;
+  companyName?: string;
 }
 
-export const BillList: React.FC<BillListProps> = ({ bills, suppliers, accounts, onEdit, onDelete, onStatusChange, onOpenForm, onToggleEstimate, userRole }) => {
+export const BillList: React.FC<BillListProps> = ({ bills, suppliers, accounts, onEdit, onDelete, onStatusChange, onOpenForm, onToggleEstimate, userRole, companyName = 'PAGA.AI' }) => {
   const [searchTerm, setSearchTerm] = useState('');
-  const [statusFilter, setStatusFilter] = useState('ALL');
+  const [statusFilter, setStatusFilter] = useState('OPEN');
   const [supplierFilter, setSupplierFilter] = useState('ALL');
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
+  const [showPdfPreview, setShowPdfPreview] = useState(false);
+  const [pdfPreviewUrl, setPdfPreviewUrl] = useState('');
 
   const filteredBills = useMemo(() => {
     return bills.filter(bill => {
@@ -34,7 +37,10 @@ export const BillList: React.FC<BillListProps> = ({ bills, suppliers, accounts, 
         supplier?.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
         account?.name.toLowerCase().includes(searchTerm.toLowerCase());
       
-      const matchesStatus = statusFilter === 'ALL' || bill.status === statusFilter;
+      const matchesStatus =
+        statusFilter === 'ALL' ||
+        (statusFilter === 'OPEN' && bill.status !== BillStatus.PAID) ||
+        bill.status === statusFilter;
       const matchesSupplier = supplierFilter === 'ALL' || bill.supplierId === supplierFilter;
       
       const billDate = new Date(bill.dueDate);
@@ -48,12 +54,33 @@ export const BillList: React.FC<BillListProps> = ({ bills, suppliers, accounts, 
 
   const canEdit = userRole !== UserRole.VIEWER;
   const canDelete = userRole === UserRole.ADMIN;
+  const canMarkPaid = userRole === UserRole.ADMIN;
 
-  const exportPDF = () => {
+  const buildPdfDoc = () => {
     const doc = new jsPDF();
-    const title = `Relatório PAGA.AI - ${new Date().toLocaleDateString()}`;
-    doc.setFontSize(18);
+    
+    // Cabeçalho com nome da empresa
+    doc.setFontSize(16);
+    doc.setTextColor(30, 41, 59);
+    doc.text(companyName, 14, 15);
+    
+    // Subtítulo com data
+    const title = `Relatório de Contas a Pagar - ${new Date().toLocaleDateString()}`;
+    doc.setFontSize(11);
+    doc.setTextColor(100, 116, 139);
     doc.text(title, 14, 22);
+
+    const formatDate = (dateStr: string) => {
+      if (!dateStr) return '';
+      return new Date(dateStr).toLocaleDateString('pt-BR');
+    };
+    const periodLabel = startDate || endDate
+      ? `Período do filtro: ${formatDate(startDate) || 'Início'} até ${formatDate(endDate) || 'Hoje'}`
+      : 'Período do filtro: Todos os lançamentos';
+    doc.setFontSize(10);
+    doc.setTextColor(120, 140, 160);
+    doc.text(periodLabel, 14, 28);
+    
     const tableData = filteredBills.map(b => {
       const s = suppliers.find(sup => sup.id === b.supplierId);
       const acc = accounts.find(a => a.id === b.accountId);
@@ -68,18 +95,46 @@ export const BillList: React.FC<BillListProps> = ({ bills, suppliers, accounts, 
         b.status
       ];
     });
+    
     (doc as any).autoTable({ 
-      startY: 30, 
+      startY: 34,
+      columnStyles: {
+        0: { cellWidth: 50 },
+        1: { cellWidth: 30 },
+        2: { cellWidth: 35 },
+        3: { cellWidth: 25, halign: 'right' },
+        4: { cellWidth: 25, halign: 'center' },
+        5: { cellWidth: 25, halign: 'center' }
+      },
       head: [['Descrição', 'Fornecedor', 'Plano de Contas', 'Valor', 'Vencimento', 'Status']], 
       body: tableData, 
       theme: 'grid', 
-      headStyles: { fillStyle: '#4f46e5' } 
+      headStyles: { fillStyle: '#4f46e5', textColor: '#ffffff', fontStyle: 'bold' },
+      bodyStyles: { textColor: '#000000' },
+      columnStyles: {
+        3: { halign: 'right', cellWidth: 28 }
+      }
     });
+    
     const total = filteredBills.reduce((acc, curr) => acc + curr.amount, 0);
     const finalY = (doc as any).lastAutoTable.finalY + 10;
     doc.setFontSize(12);
+    doc.setTextColor(30, 41, 59);
+    doc.setFont(undefined, 'bold');
     doc.text(`Total do Período: ${new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(total)}`, 14, finalY);
-    doc.save(`paga-ai-relatorio-${new Date().getTime()}.pdf`);
+    return doc;
+  };
+
+  const exportPDF = () => {
+    const doc = buildPdfDoc();
+    doc.save(`${companyName}-relatorio-contas-${new Date().getTime()}.pdf`);
+  };
+
+  const previewPDF = () => {
+    const doc = buildPdfDoc();
+    const dataUri = doc.output('datauristring');
+    setPdfPreviewUrl(dataUri);
+    setShowPdfPreview(true);
   };
 
   return (
@@ -87,9 +142,12 @@ export const BillList: React.FC<BillListProps> = ({ bills, suppliers, accounts, 
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <h1 className="text-4xl font-black text-slate-800">Contas a Pagar</h1>
-          <p className="text-slate-600 font-semibold text-sm">Acompanhe suas despesas Fixas (F) e Variáveis (V).</p>
+          <p className="text-slate-600 font-semibold text-sm">Lista padrão mostra apenas contas pendentes e atrasadas.</p>
         </div>
         <div className="flex gap-2">
+          <button onClick={previewPDF} className="flex items-center gap-2 px-4 py-2 border border-slate-200 rounded-xl bg-white text-slate-700 hover:bg-slate-50 transition-colors font-medium text-sm shadow-sm">
+            <FileDown size={18} /> Visualizar PDF
+          </button>
           <button onClick={exportPDF} className="flex items-center gap-2 px-4 py-2 border border-slate-200 rounded-xl bg-white text-slate-700 hover:bg-slate-50 transition-colors font-medium text-sm shadow-sm">
             <FileDown size={18} /> Exportar PDF
           </button>
@@ -119,6 +177,7 @@ export const BillList: React.FC<BillListProps> = ({ bills, suppliers, accounts, 
             value={statusFilter} 
             onChange={(e) => setStatusFilter(e.target.value)}
           >
+            <option value="OPEN">A Pagar (Pendentes + Atrasadas)</option>
             <option value="ALL">Todos Status</option>
             <option value={BillStatus.PENDING}>Pendente</option>
             <option value={BillStatus.PAID}>Pago</option>
@@ -218,7 +277,7 @@ export const BillList: React.FC<BillListProps> = ({ bills, suppliers, accounts, 
                     </td>
                     <td className="px-6 py-4 text-right">
                       <div className="flex items-center justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                        {canEdit && bill.status !== BillStatus.PAID && (
+                        {canMarkPaid && bill.status !== BillStatus.PAID && (
                           <button onClick={() => onStatusChange(bill.id, BillStatus.PAID)} className="p-2 text-emerald-600 hover:bg-emerald-50 rounded-lg transition-colors" title="Marcar como Pago">
                             <CheckCircle2 size={18} />
                           </button>
@@ -256,6 +315,30 @@ export const BillList: React.FC<BillListProps> = ({ bills, suppliers, accounts, 
           )}
         </div>
       </div>
+
+      {showPdfPreview && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-5xl h-[85vh] overflow-hidden flex flex-col">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-slate-200 bg-slate-50">
+              <div>
+                <h3 className="text-lg font-black text-slate-800">Pré-visualização do Relatório</h3>
+                <p className="text-xs text-slate-500 font-bold uppercase tracking-wider">Contas a Pagar</p>
+              </div>
+              <div className="flex items-center gap-2">
+                <button onClick={exportPDF} className="px-4 py-2 bg-indigo-600 text-white rounded-lg font-bold hover:bg-indigo-700 transition-colors">
+                  Exportar PDF
+                </button>
+                <button onClick={() => setShowPdfPreview(false)} className="px-4 py-2 border border-slate-200 rounded-lg font-bold text-slate-600 hover:bg-slate-50">
+                  Fechar
+                </button>
+              </div>
+            </div>
+            <div className="flex-1 bg-slate-100">
+              <iframe title="PDF Preview" src={pdfPreviewUrl} className="w-full h-full" />
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

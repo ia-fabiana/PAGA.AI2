@@ -1,20 +1,22 @@
 
 import React, { useState } from 'react';
-import { TeamMember, UserRole, ModulePermissions } from './types';
+import { TeamMember, UserRole, ModulePermissions, ChartOfAccount } from './types';
 import { 
   UserPlus, Shield, Mail, Trash2, CheckCircle, XCircle, 
   LayoutDashboard, Receipt, Users, ListTree, Building2, 
-  UserCog, Check, ShieldCheck, ToggleLeft, ToggleRight, Sparkles
+  UserCog, Check, ShieldCheck, ToggleLeft, ToggleRight, Sparkles, Lock, Unlock
 } from 'lucide-react';
 
 interface TeamManagementProps {
   team: TeamMember[];
   setTeam: React.Dispatch<React.SetStateAction<TeamMember[]>>;
   canManage: boolean;
+  accounts?: ChartOfAccount[];
 }
 
-export const TeamManagement: React.FC<TeamManagementProps> = ({ team, setTeam, canManage }) => {
+export const TeamManagement: React.FC<TeamManagementProps> = ({ team, setTeam, canManage, accounts = [] }) => {
   const [isAdding, setIsAdding] = useState(false);
+  const [expandedCategoryMember, setExpandedCategoryMember] = useState<string | null>(null);
   const [newMember, setNewMember] = useState({ 
     name: '', 
     email: '', 
@@ -35,7 +37,8 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({ team, setTeam, c
     const member: TeamMember = {
       ...newMember,
       id: Math.random().toString(36).substr(2, 9),
-      active: true
+      active: true,
+      categoryPermissions: []
     };
     setTeam(prev => [...prev, member]);
     setIsAdding(false);
@@ -73,6 +76,23 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({ team, setTeam, c
   const toggleStatus = (id: string) => {
     if (!canManage) return;
     setTeam(prev => prev.map(m => m.id === id ? { ...m, active: !m.active } : m));
+  };
+
+  const toggleCategoryPermission = (memberId: string, categoryId: string) => {
+    if (!canManage) return;
+    setTeam(prev => prev.map(m => {
+      if (m.id === memberId) {
+        const categories = m.categoryPermissions || [];
+        const hasPermission = categories.includes(categoryId);
+        return {
+          ...m,
+          categoryPermissions: hasPermission 
+            ? categories.filter(c => c !== categoryId)
+            : [...categories, categoryId]
+        };
+      }
+      return m;
+    }));
   };
 
   const modules = [
@@ -295,6 +315,54 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({ team, setTeam, c
                 })}
               </div>
             </div>
+
+            {/* Seção de Permissões de Categorias */}
+            {member.permissions?.accounts && accounts.length > 0 && (
+              <div className="mt-8 space-y-4">
+                <button
+                  onClick={() => setExpandedCategoryMember(expandedCategoryMember === member.id ? null : member.id)}
+                  className="w-full flex items-center justify-between p-4 bg-purple-50 hover:bg-purple-100 border border-purple-200 rounded-2xl transition-all group/btn"
+                  disabled={!canManage || !member.active}
+                >
+                  <div className="flex items-center gap-3">
+                    <Lock size={18} className="text-purple-600" />
+                    <span className="text-sm font-black text-purple-700 uppercase tracking-tight">Categorias do Plano de Contas</span>
+                  </div>
+                  <span className={`text-purple-600 transition-transform ${expandedCategoryMember === member.id ? 'rotate-180' : ''}`}>
+                    ▼
+                  </span>
+                </button>
+
+                {expandedCategoryMember === member.id && (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 p-4 bg-slate-50 rounded-2xl border border-slate-200">
+                    {accounts.map(account => {
+                      const hasAccess = member.categoryPermissions?.includes(account.id);
+                      return (
+                        <button
+                          key={account.id}
+                          onClick={() => toggleCategoryPermission(member.id, account.id)}
+                          disabled={!canManage || !member.active || !member.permissions?.accounts}
+                          className={`flex items-center gap-3 p-3 rounded-lg transition-all text-left font-bold text-sm ${
+                            hasAccess
+                              ? 'bg-purple-100 text-purple-700 border border-purple-300'
+                              : 'bg-white text-slate-600 border border-slate-200 hover:border-slate-300'
+                          } ${(!canManage || !member.active) ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
+                        >
+                          <div className={`w-5 h-5 rounded border-2 flex items-center justify-center font-black text-xs transition-all ${
+                            hasAccess
+                              ? 'bg-purple-600 border-purple-600 text-white'
+                              : 'border-slate-300 bg-white'
+                          }`}>
+                            {hasAccess && '✓'}
+                          </div>
+                          <span className="flex-1 truncate">{account.name}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            )}
 
             {/* Rodapé do Card */}
             <div className="mt-8 pt-6 border-t border-slate-50 flex items-center justify-between">

@@ -14,19 +14,21 @@ export const RevenueList: React.FC<RevenueListProps> = ({ revenues, onAdd, onEdi
   const [editingId, setEditingId] = useState<string | null>(null);
   const [formData, setFormData] = useState({ date: '', amount: '', description: '' });
 
+  const visibleRevenues = useMemo(() => revenues.filter(r => !r.isEstimate), [revenues]);
+
   const sortedRevenues = useMemo(() => {
-    return [...revenues].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-  }, [revenues]);
+    return [...visibleRevenues].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+  }, [visibleRevenues]);
 
   const monthlyTotal = useMemo(() => {
     const now = new Date();
-    return revenues
+    return visibleRevenues
       .filter(r => {
         const d = new Date(r.date);
         return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
       })
       .reduce((sum, r) => sum + r.amount, 0);
-  }, [revenues]);
+  }, [visibleRevenues]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -38,7 +40,8 @@ export const RevenueList: React.FC<RevenueListProps> = ({ revenues, onAdd, onEdi
     const revenue = {
       date: formData.date,
       amount: parseFloat(formData.amount),
-      description: formData.description || ''
+      description: formData.description || '',
+      isEstimate: false
     };
 
     if (editingId) {

@@ -47,6 +47,7 @@ export interface Revenue {
   date: string; // YYYY-MM-DD
   amount: number;
   description?: string;
+  isEstimate?: boolean;
 }
 
 export interface Supplier {
@@ -66,6 +67,7 @@ export interface TeamMember {
   role: UserRole;
   active: boolean;
   permissions: ModulePermissions;
+  categoryPermissions?: string[]; // IDs das categorias que pode acessar
 }
 
 export interface Company {

@@ -4,7 +4,6 @@ import { Layout } from './Layout';
 import { Dashboard } from './Dashboard';
 import { BillList } from './BillList';
 import { SupplierList } from './SupplierList';
-import { RevenueList } from './RevenueList';
 import { BillForm } from './BillForm';
 import { SupplierForm } from './SupplierForm';
 import { TeamManagement } from './TeamManagement';
@@ -40,6 +39,8 @@ const App: React.FC = () => {
   const seededRecurringBillsRef = useRef(false);
   const seededPaidBillsRef = useRef(false);
   const seededSuppliersRef = useRef(false);
+  const currentYear = new Date().getFullYear();
+  const currentMonth = new Date().getMonth();
 
   // Contas recorrentes mensais fixas
   const defaultRecurringBills: Bill[] = [
@@ -79,6 +80,49 @@ const App: React.FC = () => {
   }, []);
 
   const SUPER_ADMIN_EMAIL = 'fabianajjvsf@gmail.com';
+
+  const getClampedDay = (year: number, monthIndex: number, day: number) => {
+    const lastDay = new Date(year, monthIndex + 1, 0).getDate();
+    return Math.min(day, lastDay);
+  };
+
+  const buildRecurringBillsForYear = (baseBills: Bill[], year: number, startMonth: number, existingIds: Set<string>) => {
+    const generated: Bill[] = [];
+
+    baseBills.forEach((bill) => {
+      if (bill.recurrenceType !== 'monthly') return;
+
+      const baseDate = new Date(bill.dueDate);
+      const baseDay = Number.isNaN(baseDate.getTime()) ? 1 : baseDate.getDate();
+
+      for (let month = startMonth; month < 12; month += 1) {
+        const monthKey = String(month + 1).padStart(2, '0');
+        const newId = `${bill.id}-${year}-${monthKey}`;
+
+        if (existingIds.has(newId)) continue;
+        if (month === currentMonth && existingIds.has(bill.id)) continue;
+
+        const clampedDay = getClampedDay(year, month, baseDay);
+        const dueDate = new Date(year, month, clampedDay).toISOString().split('T')[0];
+
+        generated.push({
+          ...bill,
+          id: newId,
+          parentId: bill.id,
+          dueDate,
+          status: BillStatus.PENDING,
+        });
+      }
+    });
+
+    return generated;
+  };
+
+  const mergeRecurringBillsForYear = (existing: Bill[]) => {
+    const existingIds = new Set(existing.map((b) => b.id));
+    const added = buildRecurringBillsForYear(defaultRecurringBills, currentYear, currentMonth, existingIds);
+    return { merged: [...existing, ...added], added };
+  };
 
   const defaultAccounts: ChartOfAccount[] = [
     // DESPESAS FIXAS
@@ -274,6 +318,11 @@ const App: React.FC = () => {
     const unsubscribeAuth = auth.onAuthStateChanged(async (u: any) => {
       setUser(u);
       
+      if (u) {
+        console.log('👤 Usuário logado:', u.email);
+        console.log('🔥 Status Firebase:', isMockMode ? '❌ MODO LOCAL (localStorage) - Dados NÃO são salvos no Firebase!' : '✅ MODO REAL (Firebase Cloud) - Dados sendo salvos no servidor!');
+      }
+      
       if (isMockMode) {
         try {
           const savedBills = localStorage.getItem('pagaai_bills');
@@ -285,17 +334,21 @@ const App: React.FC = () => {
           
           if (savedBills) {
             const parsedBills = JSON.parse(savedBills);
-            // Adicionar paid bills se não existirem
+            let nextBills = parsedBills;
+
             if (!seededPaidBillsRef.current && !parsedBills.some((b: Bill) => b.id.startsWith('paid-20026'))) {
               seededPaidBillsRef.current = true;
-              setBills([...parsedBills, ...defaultPaidBills]);
-            } else {
-              setBills(parsedBills);
+              nextBills = [...parsedBills, ...defaultPaidBills];
             }
+
+            seededRecurringBillsRef.current = true;
+            const { merged } = mergeRecurringBillsForYear(nextBills);
+            setBills(merged);
           } else if (!seededRecurringBillsRef.current) {
             seededRecurringBillsRef.current = true;
             seededPaidBillsRef.current = true;
-            setBills([...defaultRecurringBills, ...defaultPaidBills]);
+            const { merged } = mergeRecurringBillsForYear(defaultPaidBills);
+            setBills(merged);
           }
           if (savedSuppliers) {
             const parsed = JSON.parse(savedSuppliers);
@@ -359,28 +412,38 @@ const App: React.FC = () => {
         seededRecurringBillsRef.current = true;
         seededPaidBillsRef.current = true;
         const batch = writeBatch(db);
-        [...defaultRecurringBills, ...defaultPaidBills].forEach((bill) => {
+        const { merged } = mergeRecurringBillsForYear(defaultPaidBills);
+        merged.forEach((bill) => {
           batch.set(doc(billsRef, bill.id), bill);
         });
         batch.commit().catch((e) => console.error('Erro ao criar contas recorrentes e pagas:', e));
-        setBills([...defaultRecurringBills, ...defaultPaidBills]);
+        setBills(merged);
         markLoaded();
         return;
       }
       const next = snap.docs.map((d) => ({ id: d.id, ...(d.data() as Omit<Bill, 'id'>) }));
-      
-      // Adicionar paid bills se não existirem
-      if (!seededPaidBillsRef.current && !next.some(b => b.id.startsWith('paid-20026'))) {
+
+      let nextBills = next;
+      if (!seededPaidBillsRef.current && !next.some((b) => b.id.startsWith('paid-20026'))) {
         seededPaidBillsRef.current = true;
         const batch = writeBatch(db);
         defaultPaidBills.forEach((bill) => {
           batch.set(doc(billsRef, bill.id), bill);
         });
         batch.commit().catch((e) => console.error('Erro ao criar contas pagas:', e));
-        setBills([...next, ...defaultPaidBills]);
-      } else {
-        setBills(next);
+        nextBills = [...next, ...defaultPaidBills];
       }
+
+      seededRecurringBillsRef.current = true;
+      const { merged, added } = mergeRecurringBillsForYear(nextBills);
+      if (added.length > 0) {
+        const batch = writeBatch(db);
+        added.forEach((bill) => {
+          batch.set(doc(billsRef, bill.id), bill);
+        });
+        batch.commit().catch((e) => console.error('Erro ao criar contas recorrentes:', e));
+      }
+      setBills(merged);
       markLoaded();
     });
 
@@ -483,7 +546,12 @@ const App: React.FC = () => {
       if (!nextIds.has(r.id)) batch.delete(doc(revenuesRef, r.id));
     });
     next.forEach((r) => batch.set(doc(revenuesRef, r.id), r));
-    await batch.commit();
+    try {
+      await batch.commit();
+      console.log('✅ Receitas sincronizadas com Firebase:', next.length, 'itens');
+    } catch (e: any) {
+      console.error('❌ Erro ao sincronizar receitas:', e.message);
+    }
   };
 
   const setAccountsWithPersist = (updater: React.SetStateAction<ChartOfAccount[]>) => {
@@ -502,8 +570,9 @@ const App: React.FC = () => {
     });
   };
 
-  const setRevenuesWithPersist = (next: Revenue[]) => {
+  const setRevenuesWithPersist = (updater: React.SetStateAction<Revenue[]>) => {
     setRevenues((prev) => {
+      const next = typeof updater === 'function' ? updater(prev) : updater;
       void persistRevenues(prev, next);
       return next;
     });
@@ -519,13 +588,23 @@ const App: React.FC = () => {
   const saveBill = async (bill: Bill) => {
     if (isMockMode || !user) return;
     const billsRef = collection(db, 'users', user.uid, 'bills');
-    await setDoc(doc(billsRef, bill.id), bill, { merge: true });
+    try {
+      await setDoc(doc(billsRef, bill.id), bill, { merge: true });
+      console.log('✅ Fatura salva no Firebase:', bill);
+    } catch (e: any) {
+      console.error('❌ Erro ao salvar fatura:', e.message);
+    }
   };
 
   const saveSupplier = async (supplier: Supplier) => {
     if (isMockMode || !user) return;
     const suppliersRef = collection(db, 'users', user.uid, 'suppliers');
-    await setDoc(doc(suppliersRef, supplier.id), supplier, { merge: true });
+    try {
+      await setDoc(doc(suppliersRef, supplier.id), supplier, { merge: true });
+      console.log('✅ Fornecedor salvo no Firebase:', supplier);
+    } catch (e: any) {
+      console.error('❌ Erro ao salvar fornecedor:', e.message);
+    }
   };
 
   const handleBillSubmit = async (bill: Bill) => {
@@ -687,6 +766,7 @@ const App: React.FC = () => {
               setShowBillForm(true);
             }}
             userRole={currentUser.role}
+            companyName={company.name}
           />
         )}
         {view === 'suppliers' && (
@@ -705,17 +785,9 @@ const App: React.FC = () => {
             userRole={currentUser.role}
           />
         )}
-        {view === 'revenues' && (
-          <RevenueList
-            revenues={revenues}
-            onAdd={handleAddRevenue}
-            onEdit={handleEditRevenue}
-            onDelete={handleDeleteRevenue}
-          />
-        )}
         {view === 'accounts' && <AccountManagement accounts={accounts} setAccounts={setAccountsWithPersist} canManage={true} />}
         {view === 'dre' && <DRE bills={bills} revenues={revenues} accounts={accounts} setRevenues={setRevenuesWithPersist} />}
-        {view === 'team' && <TeamManagement team={team} setTeam={setTeamWithPersist} canManage={true} />}
+        {view === 'team' && <TeamManagement team={team} setTeam={setTeamWithPersist} canManage={true} accounts={accounts} />}
         {view === 'profile' && <CompanyProfile company={company} setCompany={setCompanyWithPersist} canEdit={true} />}
       </main>
 

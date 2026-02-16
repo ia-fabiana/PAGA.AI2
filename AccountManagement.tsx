@@ -202,10 +202,34 @@ export const AccountManagement: React.FC<AccountManagementProps> = ({ accounts, 
                      {categories.find(c => c.id === acc.category)?.label || acc.category}
                    </span>
                 </td>
-                <td className="px-8 py-5 text-right opacity-0 group-hover:opacity-100 transition-opacity">
+                <td className="px-8 py-5 text-right">
                   <div className="flex items-center justify-end gap-2">
-                    {canManage && <button onClick={() => { setEditingId(acc.id); setFormData({ name: acc.name, description: acc.description || '', type: acc.type || 'FIXED', category: acc.category }); setIsAdding(true); }} className="text-indigo-600 hover:bg-indigo-50 p-2 rounded-xl"><Edit2 size={16}/></button>}
-                    <button onClick={() => handleDelete(acc.id)} className="text-rose-500 hover:bg-rose-50 p-2 rounded-xl"><Trash2 size={16}/></button>
+                    {canManage && (
+                      <button 
+                        onClick={() => { 
+                          console.log('🖊️ Editando categoria:', acc.id, acc.name);
+                          setEditingId(acc.id); 
+                          setFormData({ 
+                            name: acc.name, 
+                            description: acc.description || '', 
+                            type: acc.type || 'FIXED', 
+                            category: acc.category 
+                          }); 
+                          setIsAdding(true); 
+                        }} 
+                        className="text-indigo-600 hover:bg-indigo-100 p-2 rounded-lg transition-colors font-bold flex items-center gap-1"
+                      >
+                        <Edit2 size={16}/> Editar
+                      </button>
+                    )}
+                    {canManage && (
+                      <button 
+                        onClick={() => handleDelete(acc.id)} 
+                        className="text-rose-600 hover:bg-rose-100 p-2 rounded-lg transition-colors font-bold flex items-center gap-1"
+                      >
+                        <Trash2 size={16}/> Deletar
+                      </button>
+                    )}
                   </div>
                 </td>
               </tr>

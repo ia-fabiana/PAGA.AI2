@@ -18,7 +18,7 @@ export const SupplierList: React.FC<SupplierListProps> = ({ suppliers, accounts,
   const filteredSuppliers = suppliers.filter(s => 
     s.name.toLowerCase().includes(search.toLowerCase()) || 
     s.taxId.includes(search)
-  );
+  ).sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'));
 
   const canEdit = userRole !== UserRole.VIEWER;
   const canDelete = userRole === UserRole.ADMIN;

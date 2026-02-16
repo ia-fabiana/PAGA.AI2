@@ -9,7 +9,7 @@ interface DREProps {
   bills: Bill[];
   revenues: Revenue[];
   accounts: ChartOfAccount[];
-  setRevenues: (r: Revenue[]) => void;
+  setRevenues: React.Dispatch<React.SetStateAction<Revenue[]>>;
 }
 
 interface DetailModal {
@@ -18,24 +18,52 @@ interface DetailModal {
   bills: (Bill & { accountName: string })[];
   revenues: Revenue[];
   total: number;
+  isEstimate?: boolean;
 }
 
 export const DRE: React.FC<DREProps> = ({ bills, revenues, accounts, setRevenues }) => {
   const [showDetails, setShowDetails] = useState<DetailModal | null>(null);
+  const [estimateRevenueInputs, setEstimateRevenueInputs] = useState<Record<number, string>>({});
+  const [realRevenueInputs, setRealRevenueInputs] = useState<Record<number, string>>({});
   const currentYear = 2026;
 
   const months = ['JANEIRO', 'FEVEREIRO', 'MARÇO', 'ABRIL', 'MAIO', 'JUNHO', 'JULHO', 'AGOSTO', 'SETEMBRO', 'OUTUBRO', 'NOVEMBRO', 'DEZEMBRO'];
 
-  const getMonthDetails = (monthIndex: number, category: DreCategory | 'REVENUE' | 'GROSS_PROFIT' | 'NET_PROFIT') => {
+  const getDateParts = (dateStr: string) => {
+    const [yearStr, monthStr, dayStr] = dateStr.split('-');
+    const year = Number(yearStr);
+    const month = Number(monthStr);
+    const day = Number(dayStr);
+    if (!year || !month || !day) return null;
+    return { year, monthIndex: month - 1, day };
+  };
+
+  const getMonthIndex = (dateStr: string) => {
+    const parts = getDateParts(dateStr);
+    if (parts) return parts.monthIndex;
+    return new Date(dateStr).getMonth();
+  };
+
+  const getYearValue = (dateStr: string) => {
+    const parts = getDateParts(dateStr);
+    if (parts) return parts.year;
+    return new Date(dateStr).getFullYear();
+  };
+
+  const getMonthDetails = (monthIndex: number, category: DreCategory | 'REVENUE' | 'GROSS_PROFIT' | 'NET_PROFIT', isEstimate = false) => {
     const monthBills = bills.filter(b => {
-      if (b.status !== BillStatus.PAID) return false;
-      const d = new Date(b.dueDate);
-      return d.getMonth() === monthIndex && d.getFullYear() === currentYear;
+      if (isEstimate) {
+        if (b.status === BillStatus.PAID || !b.isEstimate) return false;
+      } else if (b.status !== BillStatus.PAID) {
+        return false;
+      }
+      return getMonthIndex(b.dueDate) === monthIndex && getYearValue(b.dueDate) === currentYear;
     });
 
     const monthRevenues = revenues.filter(r => {
-      const d = new Date(r.date);
-      return d.getMonth() === monthIndex && d.getFullYear() === currentYear;
+      const matchesMonth = getMonthIndex(r.date) === monthIndex && getYearValue(r.date) === currentYear;
+      if (!matchesMonth) return false;
+      return isEstimate ? r.isEstimate : !r.isEstimate;
     });
 
     let filteredBills: Bill[] = [];
@@ -63,19 +91,32 @@ export const DRE: React.FC<DREProps> = ({ bills, revenues, accounts, setRevenues
       // Somar todas as receitas do mês
       const monthRevenue = revenues
         .filter(r => {
-          const d = new Date(r.date);
-          return d.getMonth() === index && d.getFullYear() === currentYear;
+          return getMonthIndex(r.date) === index && getYearValue(r.date) === currentYear && !r.isEstimate;
+        })
+        .reduce((sum, r) => sum + r.amount, 0);
+
+      const monthEstimateRevenue = revenues
+        .filter(r => {
+          return getMonthIndex(r.date) === index && getYearValue(r.date) === currentYear && r.isEstimate;
         })
         .reduce((sum, r) => sum + r.amount, 0);
         
       const monthBills = bills.filter(b => {
         // Apenas bills pagos
         if (b.status !== BillStatus.PAID) return false;
-        const d = new Date(b.dueDate);
-        return d.getMonth() === index && d.getFullYear() === currentYear;
+        return getMonthIndex(b.dueDate) === index && getYearValue(b.dueDate) === currentYear;
+      });
+
+      const monthEstimateBills = bills.filter(b => {
+        if (b.status === BillStatus.PAID || !b.isEstimate) return false;
+        return getMonthIndex(b.dueDate) === index && getYearValue(b.dueDate) === currentYear;
       });
 
       const getSum = (cat: DreCategory) => monthBills
+        .filter(b => accounts.find(a => a.id === b.accountId)?.category === cat)
+        .reduce((sum, b) => sum + b.amount, 0);
+
+      const getEstimateSum = (cat: DreCategory) => monthEstimateBills
         .filter(b => accounts.find(a => a.id === b.accountId)?.category === cat)
         .reduce((sum, b) => sum + b.amount, 0);
 
@@ -86,12 +127,24 @@ export const DRE: React.FC<DREProps> = ({ bills, revenues, accounts, setRevenues
       const variableExpenses = getSum('VARIABLE_EXPENSES');
       const proLabore = getSum('PRO_LABORE');
 
+      const estProducts = getEstimateSum('PRODUCT_COST');
+      const estCommissions = getEstimateSum('COMMISSION');
+      const estFixedSalary = getEstimateSum('FIXED_SALARY');
+      const estFixedExpenses = getEstimateSum('FIXED_EXPENSES');
+      const estVariableExpenses = getEstimateSum('VARIABLE_EXPENSES');
+      const estProLabore = getEstimateSum('PRO_LABORE');
+
       const grossProfit = monthRevenue - products;
       const totalExpenses = commissions + fixedSalary + fixedExpenses + variableExpenses + proLabore;
       const netProfit = grossProfit - totalExpenses;
 
+      const estGrossProfit = monthEstimateRevenue - estProducts;
+      const estTotalExpenses = estCommissions + estFixedSalary + estFixedExpenses + estVariableExpenses + estProLabore;
+      const estNetProfit = estGrossProfit - estTotalExpenses;
+
       return {
         revenue: monthRevenue,
+        estRevenue: monthEstimateRevenue,
         products,
         grossProfit,
         commissions,
@@ -99,22 +152,121 @@ export const DRE: React.FC<DREProps> = ({ bills, revenues, accounts, setRevenues
         fixedExpenses,
         variableExpenses,
         proLabore,
-        netProfit
+        netProfit,
+        estProducts,
+        estGrossProfit,
+        estCommissions,
+        estFixedSalary,
+        estFixedExpenses,
+        estVariableExpenses,
+        estProLabore,
+        estNetProfit
       };
     });
   }, [bills, revenues, accounts, currentYear]);
 
+  const getEstimateRevenueForMonth = (monthIndex: number) => {
+    return revenues
+      .filter(r => r.isEstimate)
+      .filter(r => {
+        return getMonthIndex(r.date) === monthIndex && getYearValue(r.date) === currentYear;
+      })
+      .reduce((sum, r) => sum + r.amount, 0);
+  };
+
+  const getRealRevenueForMonth = (monthIndex: number) => {
+    return revenues
+      .filter(r => !r.isEstimate)
+      .filter(r => {
+        return getMonthIndex(r.date) === monthIndex && getYearValue(r.date) === currentYear;
+      })
+      .reduce((sum, r) => sum + r.amount, 0);
+  };
+
+  const parseCurrencyInput = (value: string) => {
+    const normalized = value.replace(/\./g, '').replace(',', '.');
+    const parsed = Number(normalized);
+    return Number.isNaN(parsed) ? 0 : parsed;
+  };
+
+  const formatCurrencyInput = (value: number) => {
+    if (!value) return '';
+    return value.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  };
+
+  const buildMonthDateString = (year: number, monthIndex: number) => {
+    const month = String(monthIndex + 1).padStart(2, '0');
+    return `${year}-${month}-01`;
+  };
+
+  const upsertEstimateRevenue = (monthIndex: number, amount: number) => {
+    const targetDate = buildMonthDateString(currentYear, monthIndex);
+    setRevenues((prev) => {
+      const existing = prev.find(r => {
+        if (!r.isEstimate) return false;
+        return getMonthIndex(r.date) === monthIndex && getYearValue(r.date) === currentYear;
+      });
+
+      if (amount <= 0) {
+        if (!existing) return prev;
+        return prev.filter(r => r.id !== existing.id);
+      }
+
+      if (existing) {
+        return prev.map(r => r.id === existing.id ? { ...r, amount, date: targetDate, description: r.description || 'Receita Estimada', isEstimate: true } : r);
+      }
+
+      const newRevenue: Revenue = {
+        id: `est-rev-${currentYear}-${String(monthIndex + 1).padStart(2, '0')}`,
+        date: targetDate,
+        amount,
+        description: 'Receita Estimada',
+        isEstimate: true
+      };
+      return [...prev, newRevenue];
+    });
+  };
+
+  const upsertRealRevenue = (monthIndex: number, amount: number) => {
+    const targetDate = buildMonthDateString(currentYear, monthIndex);
+    setRevenues((prev) => {
+      const existing = prev.find(r => {
+        if (r.isEstimate) return false;
+        return getMonthIndex(r.date) === monthIndex && getYearValue(r.date) === currentYear;
+      });
+
+      if (amount <= 0) {
+        if (!existing) return prev;
+        return prev.filter(r => r.id !== existing.id);
+      }
+
+      if (existing) {
+        return prev.map(r => r.id === existing.id ? { ...r, amount, date: targetDate, description: r.description || 'Receita Manual', isEstimate: false } : r);
+      }
+
+      const newRevenue: Revenue = {
+        id: `rev-${currentYear}-${String(monthIndex + 1).padStart(2, '0')}`,
+        date: targetDate,
+        amount,
+        description: 'Receita Manual',
+        isEstimate: false
+      };
+      return [...prev, newRevenue];
+    });
+  };
+
   const fmt = (v: number) => v === 0 ? '-' : new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v);
 
-  const handleCellClick = (monthIndex: number, category: DreCategory | 'REVENUE' | 'GROSS_PROFIT' | 'NET_PROFIT', value: number) => {
+  const handleCellClick = (monthIndex: number, category: DreCategory | 'REVENUE' | 'GROSS_PROFIT' | 'NET_PROFIT', value: number, isEstimate = false) => {
     if (value === 0) return;
-    const { bills: detailBills, revenues: detailRevenues } = getMonthDetails(monthIndex, category);
+    const { bills: detailBills, revenues: detailRevenues } = getMonthDetails(monthIndex, category, isEstimate);
     setShowDetails({
       month: monthIndex,
       category,
       bills: detailBills,
       revenues: detailRevenues,
-      total: value
+      total: value,
+      isEstimate
     });
   };
 
@@ -125,79 +277,182 @@ export const DRE: React.FC<DREProps> = ({ bills, revenues, accounts, setRevenues
           <h1 className="text-3xl font-black text-slate-800 tracking-tight uppercase">DRE COMERCIAL {currentYear}</h1>
           <p className="text-slate-500 font-bold uppercase text-xs tracking-widest mt-1">Resumo Consolidado das Telas de Gestão</p>
         </div>
+        <div className="hidden md:flex items-center gap-3">
+          <span className="px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest bg-slate-900 text-white">Real</span>
+          <span className="px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest bg-amber-200 text-amber-900">Estimado</span>
+        </div>
       </div>
 
       <div className="bg-white rounded-[2rem] border border-slate-200 shadow-2xl overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse min-w-[1500px]">
+          <table className="w-full text-left border-collapse min-w-[2200px]">
             <thead>
-              <tr className="bg-[#1e293b] text-white">
-                <th className="px-6 py-4 text-sm font-black uppercase sticky left-0 z-30 bg-[#1e293b] border-r border-slate-700">DESCRIÇÃO POR TELA</th>
+              <tr className="bg-slate-900 text-white">
+                <th
+                  rowSpan={2}
+                  className="px-6 py-4 text-sm font-black uppercase sticky left-0 z-30 bg-slate-900 border-r border-slate-700/80"
+                >
+                  DESCRIÇÃO POR TELA
+                </th>
                 {months.map(m => (
-                  <th key={m} className="px-4 py-4 text-center text-xs font-black uppercase border-r border-slate-700">{m}</th>
+                  <th key={m} colSpan={2} className="px-4 py-3 text-center text-[11px] font-black uppercase tracking-widest border-r border-slate-700/80">
+                    {m}
+                  </th>
+                ))}
+              </tr>
+              <tr className="bg-slate-800 text-slate-200">
+                {months.map(m => (
+                  <React.Fragment key={`${m}-sub`}>
+                    <th className="px-3 py-2 text-center text-[10px] font-black uppercase border-r border-slate-700/80">Real</th>
+                    <th className="px-3 py-2 text-center text-[10px] font-black uppercase border-r border-slate-700/80">Estimado</th>
+                  </React.Fragment>
                 ))}
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-200">
               {/* RECEITA */}
-              <tr className="bg-blue-900 text-white font-black">
-                <td className="px-6 py-4 text-sm sticky left-0 z-20 bg-blue-900 uppercase">RECEITA BRUTA (FATURAMENTO)</td>
+              <tr className="bg-emerald-700 text-white font-black">
+                <td className="px-6 py-4 text-sm sticky left-0 z-20 bg-emerald-700 uppercase">RECEITA BRUTA (FATURAMENTO)</td>
                 {dreData.map((d, i) => (
-                  <td key={i} className="px-4 py-4 text-center text-sm font-bold bg-yellow-400 text-blue-900 cursor-pointer hover:bg-yellow-300 transition-colors" onClick={() => handleCellClick(i, 'REVENUE', d.revenue)} title="Clique para ver detalhes das receitas registradas">
-                    {fmt(d.revenue)}
-                  </td>
+                  <React.Fragment key={i}>
+                    <td className="px-3 py-3 text-center text-sm font-black bg-emerald-500 text-white">
+                      <input
+                        type="text"
+                        inputMode="decimal"
+                        value={realRevenueInputs[i] ?? formatCurrencyInput(getRealRevenueForMonth(i))}
+                        onChange={(e) => setRealRevenueInputs(prev => ({ ...prev, [i]: e.target.value }))}
+                        onBlur={(e) => {
+                          const amount = parseCurrencyInput(e.target.value);
+                          upsertRealRevenue(i, amount);
+                          setRealRevenueInputs(prev => ({ ...prev, [i]: amount > 0 ? formatCurrencyInput(amount) : '' }));
+                        }}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            (e.target as HTMLInputElement).blur();
+                          }
+                        }}
+                        placeholder="0,00"
+                        className="w-24 text-center text-sm font-black text-white bg-transparent border-b border-emerald-300 focus:outline-none focus:border-white"
+                      />
+                    </td>
+                    <td className="px-3 py-3 text-center text-xs font-bold bg-emerald-100 text-emerald-900">
+                      <input
+                        type="text"
+                        inputMode="decimal"
+                        value={estimateRevenueInputs[i] ?? formatCurrencyInput(getEstimateRevenueForMonth(i))}
+                        onChange={(e) => setEstimateRevenueInputs(prev => ({ ...prev, [i]: e.target.value }))}
+                        onBlur={(e) => {
+                          const amount = parseCurrencyInput(e.target.value);
+                          upsertEstimateRevenue(i, amount);
+                          setEstimateRevenueInputs(prev => ({ ...prev, [i]: amount > 0 ? formatCurrencyInput(amount) : '' }));
+                        }}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            (e.target as HTMLInputElement).blur();
+                          }
+                        }}
+                        placeholder="0,00"
+                        className="w-24 text-center text-xs font-black text-emerald-900 bg-transparent border-b border-emerald-300 focus:outline-none focus:border-emerald-600"
+                      />
+                    </td>
+                  </React.Fragment>
                 ))}
               </tr>
 
               {/* CUSTO DE PRODUTO */}
-              <tr className="bg-slate-50 group">
-                <td className="px-6 py-4 text-sm font-bold text-rose-600 sticky left-0 z-10 bg-slate-50 uppercase">(-) ABA: PRODUTOS</td>
-                {dreData.map((d, i) => <td key={i} className="px-4 py-4 text-center text-sm cursor-pointer hover:bg-rose-100 transition-colors" onClick={() => handleCellClick(i, 'PRODUCT_COST', d.products)}>{fmt(d.products)}</td>)}
+              <tr className="bg-white group">
+                <td className="px-6 py-4 text-sm font-bold text-rose-700 sticky left-0 z-10 bg-white uppercase">(-) ABA: PRODUTOS</td>
+                {dreData.map((d, i) => (
+                  <React.Fragment key={i}>
+                    <td className="px-4 py-4 text-center text-sm text-slate-700 cursor-pointer hover:bg-slate-50 transition-colors" onClick={() => handleCellClick(i, 'PRODUCT_COST', d.products)}>{fmt(d.products)}</td>
+                    <td className="px-4 py-4 text-center text-sm text-amber-900 bg-amber-50 cursor-pointer hover:bg-amber-100 transition-colors" onClick={() => handleCellClick(i, 'PRODUCT_COST', d.estProducts, true)}>{fmt(d.estProducts)}</td>
+                  </React.Fragment>
+                ))}
               </tr>
 
               {/* LUCRO BRUTO */}
               <tr className="bg-indigo-100 font-black">
-                <td className="px-6 py-4 text-sm sticky left-0 z-10 bg-indigo-100 uppercase">(=) LUCRO BRUTO</td>
-                {dreData.map((d, i) => <td key={i} className="px-4 py-4 text-center text-sm text-indigo-900 cursor-pointer hover:bg-indigo-200 transition-colors" onClick={() => handleCellClick(i, 'GROSS_PROFIT', d.grossProfit)}>{fmt(d.grossProfit)}</td>)}
+                <td
+                  className="px-6 py-4 text-sm sticky left-0 z-10 bg-indigo-100 uppercase"
+                  title="Lucro Bruto = Receita Bruta - Produtos (Real e Estimado)"
+                >
+                  LUCRO BRUTO
+                </td>
+                {dreData.map((d, i) => (
+                  <React.Fragment key={i}>
+                    <td className="px-4 py-4 text-center text-sm text-indigo-900">{fmt(d.grossProfit)}</td>
+                    <td className="px-4 py-4 text-center text-sm text-amber-900 bg-amber-100">{fmt(d.estGrossProfit)}</td>
+                  </React.Fragment>
+                ))}
               </tr>
 
               {/* COMISSÕES */}
               <tr className="group">
                 <td className="px-6 py-4 text-sm font-bold text-slate-600 sticky left-0 z-10 bg-white uppercase">(-) ABA: COMISSÕES</td>
-                {dreData.map((d, i) => <td key={i} className="px-4 py-4 text-center text-sm cursor-pointer hover:bg-slate-100 transition-colors" onClick={() => handleCellClick(i, 'COMMISSION', d.commissions)}>{fmt(d.commissions)}</td>)}
+                {dreData.map((d, i) => (
+                  <React.Fragment key={i}>
+                    <td className="px-4 py-4 text-center text-sm text-slate-700 cursor-pointer hover:bg-slate-50 transition-colors" onClick={() => handleCellClick(i, 'COMMISSION', d.commissions)}>{fmt(d.commissions)}</td>
+                    <td className="px-4 py-4 text-center text-sm text-amber-900 bg-amber-50 cursor-pointer hover:bg-amber-100 transition-colors" onClick={() => handleCellClick(i, 'COMMISSION', d.estCommissions, true)}>{fmt(d.estCommissions)}</td>
+                  </React.Fragment>
+                ))}
               </tr>
 
               {/* SALÁRIO FIXO */}
               <tr className="group">
                 <td className="px-6 py-4 text-sm font-bold text-slate-600 sticky left-0 z-10 bg-white uppercase">(-) ABA: SALÁRIO FIXO</td>
-                {dreData.map((d, i) => <td key={i} className="px-4 py-4 text-center text-sm cursor-pointer hover:bg-slate-100 transition-colors" onClick={() => handleCellClick(i, 'FIXED_SALARY', d.fixedSalary)}>{fmt(d.fixedSalary)}</td>)}
+                {dreData.map((d, i) => (
+                  <React.Fragment key={i}>
+                    <td className="px-4 py-4 text-center text-sm text-slate-700 cursor-pointer hover:bg-slate-50 transition-colors" onClick={() => handleCellClick(i, 'FIXED_SALARY', d.fixedSalary)}>{fmt(d.fixedSalary)}</td>
+                    <td className="px-4 py-4 text-center text-sm text-amber-900 bg-amber-50 cursor-pointer hover:bg-amber-100 transition-colors" onClick={() => handleCellClick(i, 'FIXED_SALARY', d.estFixedSalary, true)}>{fmt(d.estFixedSalary)}</td>
+                  </React.Fragment>
+                ))}
               </tr>
 
               {/* DESP FIXAS */}
               <tr className="group">
                 <td className="px-6 py-4 text-sm font-bold text-slate-600 sticky left-0 z-10 bg-white uppercase">(-) ABA: DESP. FIXAS</td>
-                {dreData.map((d, i) => <td key={i} className="px-4 py-4 text-center text-sm cursor-pointer hover:bg-slate-100 transition-colors" onClick={() => handleCellClick(i, 'FIXED_EXPENSES', d.fixedExpenses)}>{fmt(d.fixedExpenses)}</td>)}
+                {dreData.map((d, i) => (
+                  <React.Fragment key={i}>
+                    <td className="px-4 py-4 text-center text-sm text-slate-700 cursor-pointer hover:bg-slate-50 transition-colors" onClick={() => handleCellClick(i, 'FIXED_EXPENSES', d.fixedExpenses)}>{fmt(d.fixedExpenses)}</td>
+                    <td className="px-4 py-4 text-center text-sm text-amber-900 bg-amber-50 cursor-pointer hover:bg-amber-100 transition-colors" onClick={() => handleCellClick(i, 'FIXED_EXPENSES', d.estFixedExpenses, true)}>{fmt(d.estFixedExpenses)}</td>
+                  </React.Fragment>
+                ))}
               </tr>
 
               {/* DESP VARIAVEIS */}
               <tr className="group">
                 <td className="px-6 py-4 text-xs font-bold text-slate-600 sticky left-0 z-10 bg-white uppercase">(-) ABA: DESP. VARIÁVEIS</td>
-                {dreData.map((d, i) => <td key={i} className="px-4 py-4 text-center text-xs cursor-pointer hover:bg-slate-100 transition-colors" onClick={() => handleCellClick(i, 'VARIABLE_EXPENSES', d.variableExpenses)}>{fmt(d.variableExpenses)}</td>)}
+                {dreData.map((d, i) => (
+                  <React.Fragment key={i}>
+                    <td className="px-4 py-4 text-center text-xs text-slate-700 cursor-pointer hover:bg-slate-50 transition-colors" onClick={() => handleCellClick(i, 'VARIABLE_EXPENSES', d.variableExpenses)}>{fmt(d.variableExpenses)}</td>
+                    <td className="px-4 py-4 text-center text-xs text-amber-900 bg-amber-50 cursor-pointer hover:bg-amber-100 transition-colors" onClick={() => handleCellClick(i, 'VARIABLE_EXPENSES', d.estVariableExpenses, true)}>{fmt(d.estVariableExpenses)}</td>
+                  </React.Fragment>
+                ))}
               </tr>
 
               {/* PRO LABORE */}
               <tr className="group">
                 <td className="px-6 py-4 text-xs font-bold text-slate-600 sticky left-0 z-10 bg-white uppercase">(-) ABA: PRO-LABORE</td>
-                {dreData.map((d, i) => <td key={i} className="px-4 py-4 text-center text-xs cursor-pointer hover:bg-slate-100 transition-colors" onClick={() => handleCellClick(i, 'PRO_LABORE', d.proLabore)}>{fmt(d.proLabore)}</td>)}
+                {dreData.map((d, i) => (
+                  <React.Fragment key={i}>
+                    <td className="px-4 py-4 text-center text-xs text-slate-700 cursor-pointer hover:bg-slate-50 transition-colors" onClick={() => handleCellClick(i, 'PRO_LABORE', d.proLabore)}>{fmt(d.proLabore)}</td>
+                    <td className="px-4 py-4 text-center text-xs text-amber-900 bg-amber-50 cursor-pointer hover:bg-amber-100 transition-colors" onClick={() => handleCellClick(i, 'PRO_LABORE', d.estProLabore, true)}>{fmt(d.estProLabore)}</td>
+                  </React.Fragment>
+                ))}
               </tr>
 
               {/* RESULTADO LÍQUIDO */}
               <tr className="bg-slate-900 text-white font-black border-t-4 border-white">
-                <td className="px-6 py-6 text-sm sticky left-0 z-20 bg-slate-900 uppercase">(=) LUCRO OU PREJUÍZO LÍQUIDO</td>
+                <td className="px-6 py-6 text-sm sticky left-0 z-20 bg-slate-900 uppercase">LUCRO OU PREJUÍZO LÍQUIDO</td>
                 {dreData.map((d, i) => (
-                  <td key={i} className={`px-4 py-6 text-center text-xs cursor-pointer hover:opacity-80 transition-opacity ${d.netProfit >= 0 ? 'bg-emerald-600' : 'bg-rose-600'}`} onClick={() => handleCellClick(i, 'NET_PROFIT', d.netProfit)}>
-                    {fmt(d.netProfit)}
-                  </td>
+                  <React.Fragment key={i}>
+                    <td className={`px-4 py-6 text-center text-xs ${d.netProfit >= 0 ? 'bg-emerald-600' : 'bg-rose-600'}`}>
+                      {fmt(d.netProfit)}
+                    </td>
+                    <td className={`px-4 py-6 text-center text-xs ${d.estNetProfit >= 0 ? 'bg-amber-200 text-amber-900' : 'bg-rose-200 text-rose-900'}`}>
+                      {fmt(d.estNetProfit)}
+                    </td>
+                  </React.Fragment>
                 ))}
               </tr>
             </tbody>
@@ -239,6 +494,7 @@ export const DRE: React.FC<DREProps> = ({ bills, revenues, accounts, setRevenues
                    showDetails.category === 'FIXED_EXPENSES' ? 'Despesas Fixas' :
                    showDetails.category === 'VARIABLE_EXPENSES' ? 'Despesas Variáveis' :
                    showDetails.category === 'PRO_LABORE' ? 'Pro-Labore' : ''}
+                  {showDetails.isEstimate ? ' (Estimado)' : ''}
                 </p>
               </div>
               <button onClick={() => setShowDetails(null)} className="p-2 hover:bg-slate-100 rounded-lg text-slate-400">
