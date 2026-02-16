@@ -29,6 +29,11 @@ export const DRE: React.FC<DREProps> = ({ bills, revenues, accounts, setRevenues
 
   const months = ['JANEIRO', 'FEVEREIRO', 'MARÇO', 'ABRIL', 'MAIO', 'JUNHO', 'JULHO', 'AGOSTO', 'SETEMBRO', 'OUTUBRO', 'NOVEMBRO', 'DEZEMBRO'];
 
+  const formatDatePtBR = (dateStr: string): string => {
+    const [year, month, day] = dateStr.split('-');
+    return `${day}/${month}/${year}`;
+  };
+
   const getDateParts = (dateStr: string) => {
     const [yearStr, monthStr, dayStr] = dateStr.split('-');
     const year = Number(yearStr);
@@ -536,11 +541,11 @@ export const DRE: React.FC<DREProps> = ({ bills, revenues, accounts, setRevenues
                       <div className="flex items-center gap-4 text-xs mt-3 pt-3 border-t border-slate-200">
                         <div>
                           <p className="text-slate-400 font-bold uppercase">Vencimento</p>
-                          <p className="text-slate-700 font-semibold">{new Date(bill.dueDate).toLocaleDateString('pt-BR')}</p>
+                          <p className="text-slate-700 font-semibold">{formatDatePtBR(bill.dueDate)}</p>
                         </div>
                         <div>
                           <p className="text-slate-400 font-bold uppercase">Pagamento</p>
-                          <p className="text-slate-700 font-semibold">{bill.paidDate ? new Date(bill.paidDate).toLocaleDateString('pt-BR') : '—'}</p>
+                          <p className="text-slate-700 font-semibold">{bill.paidDate ? formatDatePtBR(bill.paidDate) : '—'}</p>
                         </div>
                         <div className="ml-auto">
                           <p className="text-slate-400 font-bold uppercase">Status</p>

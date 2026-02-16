@@ -28,6 +28,21 @@ export const BillList: React.FC<BillListProps> = ({ bills, suppliers, accounts, 
   const [pdfPreviewUrl, setPdfPreviewUrl] = useState('');
   const [romaneioWeekFilter, setRomaneioWeekFilter] = useState(''); // Sábado da semana para filtrar romaneio
 
+  // Funções auxiliares para parsing de datas (sem timezone issues)
+  const formatDatePtBR = (dateStr: string): string => {
+    const [year, month, day] = dateStr.split('-');
+    return `${day}/${month}/${year}`;
+  };
+
+  const getDateParts = (dateStr: string) => {
+    const [yearStr, monthStr, dayStr] = dateStr.split('-');
+    const year = Number(yearStr);
+    const month = Number(monthStr);
+    const day = Number(dayStr);
+    if (!year || !month || !day) return null;
+    return { year, month, day };
+  };
+
   // Funções auxiliares para semanas (sábado a sexta)
   const getLastSaturday = (date: Date): Date => {
     const d = new Date(date);
@@ -102,12 +117,12 @@ export const BillList: React.FC<BillListProps> = ({ bills, suppliers, accounts, 
     doc.setTextColor(100, 116, 139);
     doc.text(title, 14, 22);
 
-    const formatDate = (dateStr: string) => {
+    const formatDateForPdf = (dateStr: string) => {
       if (!dateStr) return '';
-      return new Date(dateStr).toLocaleDateString('pt-BR');
+      return formatDatePtBR(dateStr);
     };
     const periodLabel = startDate || endDate
-      ? `Período do filtro: ${formatDate(startDate) || 'Início'} até ${formatDate(endDate) || 'Hoje'}`
+      ? `Período do filtro: ${formatDateForPdf(startDate) || 'Início'} até ${formatDateForPdf(endDate) || 'Hoje'}`
       : 'Período do filtro: Todos os lançamentos';
     doc.setFontSize(10);
     doc.setTextColor(120, 140, 160);
@@ -123,7 +138,7 @@ export const BillList: React.FC<BillListProps> = ({ bills, suppliers, accounts, 
         s?.name || 'N/A', 
         acc?.name || 'N/A',
         new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(b.amount), 
-        new Date(b.dueDate).toLocaleDateString('pt-BR'), 
+        formatDatePtBR(b.dueDate), 
         b.status
       ];
     });
@@ -334,7 +349,7 @@ export const BillList: React.FC<BillListProps> = ({ bills, suppliers, accounts, 
                     </td>
                     <td className="px-6 py-4">
                       <div className="text-sm text-slate-600 flex items-center gap-2">
-                        {new Date(bill.dueDate).toLocaleDateString('pt-BR')}
+                        {formatDatePtBR(bill.dueDate)}
                         {new Date(bill.dueDate) < new Date() && bill.status !== BillStatus.PAID && (
                           <span className="text-xs bg-rose-100 text-rose-600 px-1.5 py-0.5 rounded font-bold uppercase">Atrasada</span>
                         )}
@@ -351,7 +366,7 @@ export const BillList: React.FC<BillListProps> = ({ bills, suppliers, accounts, 
                         />
                       ) : (
                         <span className="text-sm text-slate-600">
-                          {bill.paidDate ? new Date(bill.paidDate).toLocaleDateString('pt-BR') : '—'}
+                          {bill.paidDate ? formatDatePtBR(bill.paidDate) : '—'}
                         </span>
                       )}
                     </td>

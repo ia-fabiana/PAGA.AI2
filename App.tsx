@@ -43,6 +43,17 @@ const App: React.FC = () => {
   const currentYear = new Date().getFullYear();
   const currentMonth = new Date().getMonth();
 
+  // Validar integridade das contas: PAID sem paidDate devem ser PENDING
+  const validateBills = (billsToValidate: Bill[]): Bill[] => {
+    return billsToValidate.map(bill => {
+      if (bill.status === BillStatus.PAID && !bill.paidDate) {
+        console.warn(`⚠️ Conta "${bill.description}" estava PAID sem Data de Pagamento - revertendo para PENDENTE`);
+        return { ...bill, status: BillStatus.PENDING };
+      }
+      return bill;
+    });
+  };
+
   // Contas recorrentes mensais fixas
   const defaultRecurringBills: Bill[] = [
     { id: 'rec-1', supplierId: '', description: 'LED10', amount: 1264.59, dueDate: new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().split('T')[0], status: BillStatus.PENDING, recurrenceType: 'monthly', totalInstallments: 12, accountId: '1', isEstimate: true },
@@ -57,26 +68,32 @@ const App: React.FC = () => {
     { id: 'rec-10', supplierId: '', description: 'SABESP - ÁGUA', amount: 2070.86, dueDate: new Date(new Date().getFullYear(), new Date().getMonth(), 25).toISOString().split('T')[0], status: BillStatus.PENDING, recurrenceType: 'monthly', totalInstallments: 12, accountId: '2', isEstimate: true },
   ];
 
-  // Pagamentos comprovados de 20/02/2026
-  const defaultPaidBills: Bill[] = [
-    { id: 'paid-20026-001', supplierId: '', description: 'DORIVAL CESÁRIO', amount: 1324.00, dueDate: '2026-02-15', status: BillStatus.PAID, recurrenceType: 'none', accountId: '1', isEstimate: false },
-    { id: 'paid-20026-002', supplierId: '', description: 'INTERLUX - TOALHAS', amount: 1100.57, dueDate: '2026-02-15', status: BillStatus.PAID, recurrenceType: 'none', accountId: '27', isEstimate: false },
-    { id: 'paid-20026-003', supplierId: '', description: 'CONTABILIDADE REPRECON - MKM CONTABILIDADE', amount: 850.00, dueDate: '2026-02-15', status: BillStatus.PAID, recurrenceType: 'none', accountId: '8', isEstimate: false },
-    { id: 'paid-20026-004', supplierId: '', description: 'SALES (PROD. LIMPEZA)', amount: 598.08, dueDate: '2026-02-17', status: BillStatus.PAID, recurrenceType: 'none', accountId: '27', isEstimate: false },
-    { id: 'paid-20026-005', supplierId: '', description: 'SOFTCLEAN | 27374 | PARC 1/3', amount: 727.78, dueDate: '2026-02-19', status: BillStatus.PAID, recurrenceType: 'none', accountId: '64', isEstimate: false },
-    { id: 'paid-20026-006', supplierId: '', description: 'CONTABILIDADE KELLY - MENSALIDADE', amount: 650.00, dueDate: '2026-02-20', status: BillStatus.PAID, recurrenceType: 'none', accountId: '42', isEstimate: false },
-    { id: 'paid-20026-007', supplierId: '', description: 'DAS EQUIPE - GUIAS DE PROFISSIONAIS', amount: 1051.70, dueDate: '2026-02-20', status: BillStatus.PAID, recurrenceType: 'none', accountId: '43', isEstimate: false },
-    { id: 'paid-20026-008', supplierId: '', description: 'DAS SALÃO', amount: 7077.94, dueDate: '2026-02-20', status: BillStatus.PAID, recurrenceType: 'none', accountId: '72', isEstimate: false },
-    { id: 'paid-20026-009', supplierId: '', description: 'FGTS', amount: 986.84, dueDate: '2026-02-20', status: BillStatus.PAID, recurrenceType: 'none', accountId: '84', isEstimate: false },
-    { id: 'paid-20026-010', supplierId: '', description: 'INSS', amount: 415.96, dueDate: '2026-02-20', status: BillStatus.PAID, recurrenceType: 'none', accountId: '88', isEstimate: false },
-  ];
+  // Contas pagas são adicionadas apenas quando o usuário marca manualmente com paidDate
+  const defaultPaidBills: Bill[] = [];
 
   // Limpar dados se ?clear=true na URL
+  // Estornar contas pagas se ?revert-paid=true na URL
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     if (params.get('clear') === 'true') {
       localStorage.clear();
       window.location.href = '/';
+    }
+    if (params.get('revert-paid') === 'true') {
+      try {
+        const stored = localStorage.getItem('bills');
+        if (stored) {
+          const bills = JSON.parse(stored);
+          const reverted = bills.map((b: Bill) => 
+            b.status === BillStatus.PAID ? { ...b, status: BillStatus.PENDING, paidDate: undefined } : b
+          );
+          localStorage.setItem('bills', JSON.stringify(reverted));
+          console.log(`✅ ${bills.filter((b: Bill) => b.status === BillStatus.PAID).length} contas estornadas para PENDENTE`);
+          window.location.href = '/';
+        }
+      } catch (e) {
+        console.error('Erro ao estornar contas:', e);
+      }
     }
   }, []);
 
@@ -374,12 +391,12 @@ const App: React.FC = () => {
 
             seededRecurringBillsRef.current = true;
             const { merged } = mergeRecurringBillsForYear(nextBills);
-            setBills(merged);
+            setBills(validateBills(merged));
           } else if (!seededRecurringBillsRef.current) {
             seededRecurringBillsRef.current = true;
             seededPaidBillsRef.current = true;
             const { merged } = mergeRecurringBillsForYear(defaultPaidBills);
-            setBills(merged);
+            setBills(validateBills(merged));
           }
           if (savedSuppliers) {
             const parsed = JSON.parse(savedSuppliers);
@@ -461,7 +478,7 @@ const App: React.FC = () => {
           batch.set(doc(billsRef, bill.id), bill);
         });
         batch.commit().catch((e) => console.error('Erro ao criar contas recorrentes e pagas:', e));
-        setBills(merged);
+        setBills(validateBills(merged));
         markLoaded();
         return;
       }
@@ -487,7 +504,7 @@ const App: React.FC = () => {
         });
         batch.commit().catch((e) => console.error('Erro ao criar contas recorrentes:', e));
       }
-      setBills(merged);
+      setBills(validateBills(merged));
       markLoaded();
     });
 
