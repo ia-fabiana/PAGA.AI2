@@ -1,7 +1,7 @@
 
 import React, { useState } from 'react';
 import { Supplier, ChartOfAccount } from './types';
-import { X, User, ShieldCheck, Mail, ListTree } from 'lucide-react';
+import { X, User, ShieldCheck, Mail, ListTree, Phone, Users } from 'lucide-react';
 
 interface SupplierFormProps {
   accounts: ChartOfAccount[];
@@ -15,13 +15,15 @@ export const SupplierForm: React.FC<SupplierFormProps> = ({ accounts, onClose, o
     name: '',
     taxId: '',
     email: '',
+    phone: '',
+    contactPerson: '',
     accountId: accounts[0]?.id || ''
   });
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!formData.name || !formData.taxId || !formData.accountId) {
-      alert('Preencha os campos obrigatórios');
+    if (!formData.name || !formData.accountId) {
+      alert('Preencha os campos obrigatórios (Nome e Plano de Contas)');
       return;
     }
     onSubmit(formData as Supplier);
@@ -53,12 +55,11 @@ export const SupplierForm: React.FC<SupplierFormProps> = ({ accounts, onClose, o
 
           <div>
             <label className="block text-sm font-medium text-slate-700 mb-1 flex items-center gap-1">
-              <ShieldCheck size={14} /> CNPJ / CPF
+              <ShieldCheck size={14} /> CNPJ / CPF <span className="text-slate-400 text-xs">(Opcional)</span>
             </label>
             <input 
-              required
               className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none"
-              placeholder="00.000.000/0000-00"
+              placeholder="00.000.000/0000-00 ou 000.000.000-00"
               value={formData.taxId}
               onChange={e => setFormData({ ...formData, taxId: e.target.value })}
             />
@@ -66,7 +67,31 @@ export const SupplierForm: React.FC<SupplierFormProps> = ({ accounts, onClose, o
 
           <div>
             <label className="block text-sm font-medium text-slate-700 mb-1 flex items-center gap-1">
-              <Mail size={14} /> Email de Contato
+              <Phone size={14} /> Telefone / Celular <span className="text-slate-400 text-xs">(Opcional)</span>
+            </label>
+            <input 
+              className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none"
+              placeholder="(11) 98765-4321 ou 11 98765-4321"
+              value={formData.phone}
+              onChange={e => setFormData({ ...formData, phone: e.target.value })}
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1 flex items-center gap-1">
+              <Users size={14} /> Pessoa de Contato <span className="text-slate-400 text-xs">(Opcional)</span>
+            </label>
+            <input 
+              className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none"
+              placeholder="Ex: João Silva - Gerente de Vendas"
+              value={formData.contactPerson}
+              onChange={e => setFormData({ ...formData, contactPerson: e.target.value })}
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1 flex items-center gap-1">
+              <Mail size={14} /> Email de Contato <span className="text-slate-400 text-xs">(Opcional)</span>
             </label>
             <input 
               type="email"

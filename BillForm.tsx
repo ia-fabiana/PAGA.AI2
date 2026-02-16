@@ -181,27 +181,42 @@ export const BillForm: React.FC<BillFormProps> = ({ suppliers, accounts, onClose
             </div>
 
             {formData.recurrenceType !== 'specific' && (
-              <div className="grid grid-cols-2 gap-4 pt-2 animate-in slide-in-from-top-2">
-                <div>
-                  <label className="block text-xs font-bold text-slate-500 mb-1 flex items-center gap-1">
-                    <DollarSign size={12} /> Valor
-                  </label>
-                  <input 
-                    type="number" step="0.01" className="w-full px-4 py-2 bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none"
-                    value={formData.amount}
-                    onChange={e => setFormData({ ...formData, amount: parseFloat(e.target.value) })}
-                  />
+              <div className="space-y-3 pt-2 animate-in slide-in-from-top-2">
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-500 mb-1 flex items-center gap-1">
+                      <DollarSign size={12} /> Valor
+                    </label>
+                    <input 
+                      type="number" step="0.01" className="w-full px-4 py-2 bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none"
+                      value={formData.amount}
+                      onChange={e => setFormData({ ...formData, amount: parseFloat(e.target.value) })}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-slate-500 mb-1 flex items-center gap-1">
+                      <Calendar size={12} /> Vencimento
+                    </label>
+                    <input 
+                      type="date" className="w-full px-4 py-2 bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none"
+                      value={formData.dueDate}
+                      onChange={e => setFormData({ ...formData, dueDate: e.target.value })}
+                    />
+                  </div>
                 </div>
-                <div>
-                  <label className="block text-xs font-bold text-slate-500 mb-1 flex items-center gap-1">
-                    <Calendar size={12} /> Vencimento
-                  </label>
+                
+                <label className="flex items-center gap-3 p-3 bg-amber-50 border-2 border-amber-200 rounded-xl cursor-pointer hover:bg-amber-100 transition-colors">
                   <input 
-                    type="date" className="w-full px-4 py-2 bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none"
-                    value={formData.dueDate}
-                    onChange={e => setFormData({ ...formData, dueDate: e.target.value })}
+                    type="checkbox" 
+                    className="w-4 h-4 rounded border-2 border-amber-400 accent-amber-500"
+                    checked={formData.isEstimate || false}
+                    onChange={e => setFormData({ ...formData, isEstimate: e.target.checked })}
                   />
-                </div>
+                  <div className="flex-1">
+                    <span className="text-sm font-semibold text-amber-900">Valor é uma estimativa</span>
+                    <span className="text-xs text-amber-700 block">Marca este valor como estimado até ter o valor correto</span>
+                  </div>
+                </label>
               </div>
             )}
 
@@ -211,7 +226,7 @@ export const BillForm: React.FC<BillFormProps> = ({ suppliers, accounts, onClose
                   {formData.specificDues?.map((due, idx) => (
                     <div key={idx} className="flex items-center gap-2 p-3 bg-white border border-slate-200 rounded-xl group animate-in slide-in-from-right-2">
                       <div className="flex-1">
-                        <label className="text-[10px] font-bold text-slate-400 uppercase">Vencimento {idx + 1}</label>
+                        <label className="text-xs font-bold text-slate-400 uppercase">Vencimento {idx + 1}</label>
                         <input 
                           type="date" className="w-full text-sm outline-none bg-transparent"
                           value={due.date}
@@ -219,7 +234,7 @@ export const BillForm: React.FC<BillFormProps> = ({ suppliers, accounts, onClose
                         />
                       </div>
                       <div className="w-24">
-                        <label className="text-[10px] font-bold text-slate-400 uppercase">Valor</label>
+                        <label className="text-xs font-bold text-slate-400 uppercase">Valor</label>
                         <input 
                           type="number" step="0.01" className="w-full text-sm outline-none bg-transparent font-bold text-indigo-700"
                           value={due.amount}

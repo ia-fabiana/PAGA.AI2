@@ -186,7 +186,7 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({ team, setTeam, c
                       <div className={`p-3 rounded-2xl transition-all ${active ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-400'}`}>
                         <mod.icon size={24} />
                       </div>
-                      <span className="text-[10px] font-black uppercase tracking-tighter">{mod.label}</span>
+                      <span className="text-xs font-black uppercase tracking-tighter">{mod.label}</span>
                       {active && (
                         <div className="absolute top-2 right-2 w-2 h-2 rounded-full bg-indigo-500 animate-pulse"></div>
                       )}
@@ -217,11 +217,11 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({ team, setTeam, c
                   <Mail size={14} /> {member.email}
                 </div>
                 <div className="mt-4 flex flex-wrap justify-center sm:justify-start gap-2">
-                  <span className={`px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest ${member.active ? 'bg-emerald-100 text-emerald-600' : 'bg-slate-100 text-slate-400'}`}>
+                  <span className={`px-4 py-1.5 rounded-full text-xs font-black uppercase tracking-widest ${member.active ? 'bg-emerald-100 text-emerald-600' : 'bg-slate-100 text-slate-400'}`}>
                     {member.active ? 'Acesso Ativo' : 'Acesso Bloqueado'}
                   </span>
                   {member.role === UserRole.ADMIN && (
-                    <span className="bg-amber-100 text-amber-600 px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest flex items-center gap-1.5">
+                    <span className="bg-amber-100 text-amber-600 px-4 py-1.5 rounded-full text-xs font-black uppercase tracking-widest flex items-center gap-1.5">
                       <Shield size={12} /> Administrador
                     </span>
                   )}
@@ -252,7 +252,7 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({ team, setTeam, c
             <div className="space-y-4">
               <div className="flex items-center gap-3 mb-4">
                 <div className="h-px flex-1 bg-slate-100"></div>
-                <span className="text-[10px] font-black text-slate-300 uppercase tracking-widest px-2">Módulos Disponíveis</span>
+                <span className="text-xs font-black text-slate-300 uppercase tracking-widest px-2">Módulos Disponíveis</span>
                 <div className="h-px flex-1 bg-slate-100"></div>
               </div>
               
@@ -276,7 +276,7 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({ team, setTeam, c
                       </div>
                       
                       <div className="text-center overflow-hidden w-full">
-                        <span className={`text-[10px] font-black uppercase tracking-tight block truncate ${isEnabled ? 'text-current' : 'text-slate-400'}`}>
+                        <span className={`text-xs font-black uppercase tracking-tight block truncate ${isEnabled ? 'text-current' : 'text-slate-400'}`}>
                           {mod.label}
                         </span>
                         <span className={`text-[8px] font-black uppercase opacity-60 tracking-tighter ${isEnabled ? 'text-current' : 'text-slate-300'}`}>
@@ -298,7 +298,7 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({ team, setTeam, c
 
             {/* Rodapé do Card */}
             <div className="mt-8 pt-6 border-t border-slate-50 flex items-center justify-between">
-              <span className="text-[10px] font-black text-slate-300 uppercase tracking-widest">Acesso Granular</span>
+              <span className="text-xs font-black text-slate-300 uppercase tracking-widest">Acesso Granular</span>
               <div className="flex -space-x-1">
                 {modules.filter(m => member.permissions?.[m.id as keyof ModulePermissions]).map(m => (
                   <div key={m.id} title={m.label} className={`w-6 h-6 rounded-full border-2 border-white flex items-center justify-center ${getIconBg(m.color, true)}`}>

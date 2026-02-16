@@ -1,7 +1,7 @@
 
 import React from 'react';
 import { Supplier, ChartOfAccount, UserRole } from './types';
-import { Plus, Search, Edit2, Trash2, Mail, Hash, ListTree } from 'lucide-react';
+import { Plus, Search, Edit2, Trash2, Mail, Hash, ListTree, Phone, Users } from 'lucide-react';
 
 interface SupplierListProps {
   suppliers: Supplier[];
@@ -69,12 +69,26 @@ export const SupplierList: React.FC<SupplierListProps> = ({ suppliers, accounts,
               <h3 className="font-bold text-slate-800 text-lg mb-4 truncate" title={supplier.name}>{supplier.name}</h3>
               
               <div className="space-y-3">
-                <div className="flex items-center gap-2 text-sm text-slate-500">
-                  <Hash size={14} /> <span>{supplier.taxId}</span>
-                </div>
-                <div className="flex items-center gap-2 text-sm text-slate-500">
-                  <Mail size={14} /> <span className="truncate">{supplier.email}</span>
-                </div>
+                {supplier.taxId && (
+                  <div className="flex items-center gap-2 text-sm text-slate-500">
+                    <Hash size={14} /> <span>{supplier.taxId}</span>
+                  </div>
+                )}
+                {supplier.phone && (
+                  <div className="flex items-center gap-2 text-sm text-slate-500">
+                    <Phone size={14} /> <span>{supplier.phone}</span>
+                  </div>
+                )}
+                {supplier.contactPerson && (
+                  <div className="flex items-center gap-2 text-sm text-slate-500">
+                    <Users size={14} /> <span className="truncate">{supplier.contactPerson}</span>
+                  </div>
+                )}
+                {supplier.email && (
+                  <div className="flex items-center gap-2 text-sm text-slate-500">
+                    <Mail size={14} /> <span className="truncate">{supplier.email}</span>
+                  </div>
+                )}
                 <div className="flex items-center gap-2 text-sm text-slate-500">
                   <ListTree size={14} className="text-indigo-600" />
                   <span className="bg-indigo-50 text-indigo-700 px-2 py-0.5 rounded text-xs font-bold uppercase truncate">

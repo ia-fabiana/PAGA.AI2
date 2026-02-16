@@ -43,9 +43,10 @@ export interface ChartOfAccount {
 }
 
 export interface Revenue {
-  month: number; // 0-11
-  year: number;
+  id: string;
+  date: string; // YYYY-MM-DD
   amount: number;
+  description?: string;
 }
 
 export interface Supplier {
@@ -53,6 +54,8 @@ export interface Supplier {
   name: string;
   taxId: string;
   email: string;
+  phone?: string;
+  contactPerson?: string;
   accountId: string;
 }
 
@@ -87,6 +90,7 @@ export interface Bill {
   parentId?: string;
   selectedMonths?: number[];
   specificDues?: { date: string, amount: number }[];
+  isEstimate?: boolean;
 }
 
 export interface FilterOptions {

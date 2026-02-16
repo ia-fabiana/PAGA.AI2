@@ -1,7 +1,7 @@
 
 import React, { useState, useMemo } from 'react';
 import { Bill, Supplier, BillStatus, UserRole, ChartOfAccount } from './types';
-import { Search, Plus, FileDown, Edit2, Trash2, CheckCircle2, Repeat, Calendar, ListTree, User } from 'lucide-react';
+import { Search, Plus, FileDown, Edit2, Trash2, CheckCircle2, Repeat, Calendar, ListTree, User, AlertCircle } from 'lucide-react';
 import { jsPDF } from 'jspdf';
 import 'jspdf-autotable';
 
@@ -13,10 +13,11 @@ interface BillListProps {
   onDelete: (id: string) => void;
   onStatusChange: (id: string, status: BillStatus) => void;
   onOpenForm: () => void;
+  onToggleEstimate: (id: string) => void;
   userRole: UserRole;
 }
 
-export const BillList: React.FC<BillListProps> = ({ bills, suppliers, accounts, onEdit, onDelete, onStatusChange, onOpenForm, userRole }) => {
+export const BillList: React.FC<BillListProps> = ({ bills, suppliers, accounts, onEdit, onDelete, onStatusChange, onOpenForm, onToggleEstimate, userRole }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('ALL');
   const [supplierFilter, setSupplierFilter] = useState('ALL');
@@ -85,8 +86,8 @@ export const BillList: React.FC<BillListProps> = ({ bills, suppliers, accounts, 
     <div className="space-y-6">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-slate-800">Contas a Pagar</h1>
-          <p className="text-slate-500">Acompanhe suas despesas Fixas (F) e Variáveis (V).</p>
+          <h1 className="text-4xl font-black text-slate-800">Contas a Pagar</h1>
+          <p className="text-slate-600 font-semibold text-sm">Acompanhe suas despesas Fixas (F) e Variáveis (V).</p>
         </div>
         <div className="flex gap-2">
           <button onClick={exportPDF} className="flex items-center gap-2 px-4 py-2 border border-slate-200 rounded-xl bg-white text-slate-700 hover:bg-slate-50 transition-colors font-medium text-sm shadow-sm">
@@ -162,12 +163,12 @@ export const BillList: React.FC<BillListProps> = ({ bills, suppliers, accounts, 
           <table className="w-full text-left border-collapse min-w-[800px]">
             <thead>
               <tr className="bg-slate-50 border-b border-slate-200">
-                <th className="px-6 py-4 text-xs font-semibold text-slate-500 uppercase tracking-wider">Descrição / Fornecedor</th>
-                <th className="px-6 py-4 text-xs font-semibold text-slate-500 uppercase tracking-wider text-center">Tipo</th>
-                <th className="px-6 py-4 text-xs font-semibold text-slate-500 uppercase tracking-wider">Plano de Contas</th>
-                <th className="px-6 py-4 text-xs font-semibold text-slate-500 uppercase tracking-wider">Vencimento</th>
-                <th className="px-6 py-4 text-xs font-semibold text-slate-500 uppercase tracking-wider">Valor</th>
-                <th className="px-6 py-4 text-xs font-semibold text-slate-500 uppercase tracking-wider text-right">Ações</th>
+                <th className="px-6 py-4 text-sm font-semibold text-slate-500 uppercase tracking-wider">Descrição / Fornecedor</th>
+                <th className="px-6 py-4 text-sm font-semibold text-slate-500 uppercase tracking-wider text-center">Tipo</th>
+                <th className="px-6 py-4 text-sm font-semibold text-slate-500 uppercase tracking-wider">Plano de Contas</th>
+                <th className="px-6 py-4 text-sm font-semibold text-slate-500 uppercase tracking-wider">Vencimento</th>
+                <th className="px-6 py-4 text-sm font-semibold text-slate-500 uppercase tracking-wider">Valor</th>
+                <th className="px-6 py-4 text-sm font-semibold text-slate-500 uppercase tracking-wider text-right">Ações</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
@@ -179,24 +180,25 @@ export const BillList: React.FC<BillListProps> = ({ bills, suppliers, accounts, 
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-3">
                         {bill.recurrenceType !== 'none' && <div className="bg-indigo-100 p-1.5 rounded-lg text-indigo-600"><Repeat size={14} /></div>}
+                        {bill.isEstimate && <div className="bg-amber-100 px-2 py-1 rounded text-amber-700 text-xs font-bold uppercase tracking-tight">Estimativa</div>}
                         <div>
-                          <p className="font-medium text-slate-800">
+                          <p className="font-semibold text-slate-800 text-sm">
                             {bill.description}
                             {bill.currentInstallment && <span className="ml-2 text-xs font-bold text-slate-400">({bill.currentInstallment}/{bill.totalInstallments})</span>}
                           </p>
-                          <p className="text-xs text-slate-500 flex items-center gap-1">
+                          <p className="text-sm text-slate-500 flex items-center gap-1">
                             <User size={10} /> {supplier?.name || 'Fornecedor Desconhecido'}
                           </p>
                         </div>
                       </div>
                     </td>
                     <td className="px-6 py-4 text-center">
-                      <span className={`px-2 py-0.5 rounded text-[10px] font-black uppercase ${account?.type === 'VARIABLE' ? 'bg-orange-100 text-orange-600' : 'bg-indigo-100 text-indigo-600'}`} title={account?.type === 'VARIABLE' ? 'Despesa Variável' : 'Despesa Fixa'}>
+                      <span className={`px-2 py-0.5 rounded text-xs font-black uppercase ${account?.type === 'VARIABLE' ? 'bg-orange-100 text-orange-600' : 'bg-indigo-100 text-indigo-600'}`} title={account?.type === 'VARIABLE' ? 'Despesa Variável' : 'Despesa Fixa'}>
                         {account?.type === 'VARIABLE' ? 'V' : 'F'}
                       </span>
                     </td>
                     <td className="px-6 py-4">
-                      <div className="flex items-center gap-2 text-[10px] text-indigo-700 bg-indigo-50 px-3 py-1 rounded-full w-fit font-bold uppercase tracking-tighter">
+                      <div className="flex items-center gap-2 text-xs text-indigo-700 bg-indigo-50 px-3 py-1 rounded-full w-fit font-bold uppercase tracking-tighter">
                         <ListTree size={12} />
                         {account?.name || 'N/A'}
                       </div>
@@ -205,12 +207,12 @@ export const BillList: React.FC<BillListProps> = ({ bills, suppliers, accounts, 
                       <div className="text-sm text-slate-600 flex items-center gap-2">
                         {new Date(bill.dueDate).toLocaleDateString('pt-BR')}
                         {new Date(bill.dueDate) < new Date() && bill.status !== BillStatus.PAID && (
-                          <span className="text-[10px] bg-rose-100 text-rose-600 px-1.5 py-0.5 rounded font-bold uppercase">Atrasada</span>
+                          <span className="text-xs bg-rose-100 text-rose-600 px-1.5 py-0.5 rounded font-bold uppercase">Atrasada</span>
                         )}
                       </div>
                     </td>
                     <td className="px-6 py-4">
-                      <span className="font-semibold text-slate-800">
+                      <span className="font-semibold text-slate-800 text-sm">
                         {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(bill.amount)}
                       </span>
                     </td>
@@ -219,6 +221,15 @@ export const BillList: React.FC<BillListProps> = ({ bills, suppliers, accounts, 
                         {canEdit && bill.status !== BillStatus.PAID && (
                           <button onClick={() => onStatusChange(bill.id, BillStatus.PAID)} className="p-2 text-emerald-600 hover:bg-emerald-50 rounded-lg transition-colors" title="Marcar como Pago">
                             <CheckCircle2 size={18} />
+                          </button>
+                        )}
+                        {canEdit && (
+                          <button 
+                            onClick={() => onToggleEstimate(bill.id)} 
+                            className={`p-2 rounded-lg transition-colors ${bill.isEstimate ? 'text-amber-600 hover:bg-amber-50' : 'text-slate-400 hover:bg-slate-50'}`}
+                            title={bill.isEstimate ? 'Marcar como valor real' : 'Marcar como estimativa'}
+                          >
+                            <AlertCircle size={18} />
                           </button>
                         )}
                         {canEdit && (

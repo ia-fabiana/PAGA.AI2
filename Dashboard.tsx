@@ -87,8 +87,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ bills, suppliers, accounts
     <div className="space-y-8 animate-in fade-in duration-500">
       <header className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-slate-800">Visão Geral Financeira</h1>
-          <p className="text-slate-500">Controle de Despesas Fixas e Variáveis por período.</p>
+          <h1 className="text-4xl font-black text-slate-800">Visão Geral Financeira</h1>
+          <p className="text-slate-500 font-bold text-sm uppercase">Controle de Despesas Fixas e Variáveis por período.</p>
         </div>
         
         <div className="bg-white p-3 rounded-2xl border border-slate-200 shadow-sm flex flex-wrap items-center gap-3">
@@ -113,7 +113,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ bills, suppliers, accounts
           </div>
           <button 
             onClick={resetToCurrentMonth}
-            className="text-[10px] font-bold text-indigo-600 bg-indigo-50 px-2 py-1 rounded hover:bg-indigo-100 transition-colors uppercase"
+            className="text-xs font-bold text-indigo-600 bg-indigo-50 px-2 py-1 rounded hover:bg-indigo-100 transition-colors uppercase"
           >
             Este Mês
           </button>
@@ -130,7 +130,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ bills, suppliers, accounts
               <TrendingUp className="text-slate-300" size={20} />
             </div>
             <p className="text-sm text-slate-500 font-medium">{stat.label}</p>
-            <h3 className="text-2xl font-bold text-slate-800">
+            <h3 className="text-3xl font-black text-slate-800">
               {currencyFormatter(stat.value)}
             </h3>
           </div>
@@ -144,8 +144,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ bills, suppliers, accounts
           </div>
           <div>
             <p className="text-xs font-black text-slate-400 uppercase tracking-widest">Despesas Fixas</p>
-            <h4 className="text-2xl font-black text-indigo-600">{currencyFormatter(typeStats.fixed)}</h4>
-            <p className="text-[10px] text-slate-400 font-bold">Baseado na sua planilha de Despesas Fixas</p>
+            <h4 className="text-3xl font-black text-indigo-600">{currencyFormatter(typeStats.fixed)}</h4>
+            <p className="text-xs text-slate-400 font-bold">Baseado na sua planilha de Despesas Fixas</p>
           </div>
         </div>
         <div className="bg-white p-6 rounded-3xl border border-orange-100 shadow-sm flex items-center gap-6">
@@ -154,8 +154,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ bills, suppliers, accounts
           </div>
           <div>
             <p className="text-xs font-black text-slate-400 uppercase tracking-widest">Despesas Variáveis</p>
-            <h4 className="text-2xl font-black text-orange-600">{currencyFormatter(typeStats.variable)}</h4>
-            <p className="text-[10px] text-slate-400 font-bold">Gastos pontuais e extras do período</p>
+            <h4 className="text-3xl font-black text-orange-600">{currencyFormatter(typeStats.variable)}</h4>
+            <p className="text-xs text-slate-400 font-bold">Gastos pontuais e extras do período</p>
           </div>
         </div>
       </div>
@@ -201,17 +201,17 @@ export const Dashboard: React.FC<DashboardProps> = ({ bills, suppliers, accounts
                     <div className="flex-1 min-w-0 mr-2">
                       <div className="flex items-center gap-1.5 mb-0.5">
                         <p className="font-medium text-slate-800 truncate text-sm">{bill.description}</p>
-                        <span className={`text-[8px] font-black uppercase px-1 rounded ${account?.type === 'VARIABLE' ? 'bg-orange-100 text-orange-600' : 'bg-indigo-100 text-indigo-600'}`}>
+                        <span className={`text-xs font-black uppercase px-1 rounded ${account?.type === 'VARIABLE' ? 'bg-orange-100 text-orange-600' : 'bg-indigo-100 text-indigo-600'}`}>
                           {account?.type === 'VARIABLE' ? 'V' : 'F'}
                         </span>
                       </div>
-                      <p className="text-[10px] text-slate-400 truncate font-bold uppercase tracking-tight">{supplier?.name || 'Fornecedor'}</p>
+                      <p className="text-xs text-slate-400 truncate font-bold uppercase tracking-tight">{supplier?.name || 'Fornecedor'}</p>
                     </div>
                     <div className="text-right shrink-0">
                       <p className="font-bold text-slate-800 text-sm">
                         {currencyFormatter(bill.amount)}
                       </p>
-                      <p className={`text-[9px] font-black uppercase tracking-wider ${
+                      <p className={`text-xs font-black uppercase tracking-wider ${
                         new Date(bill.dueDate) < new Date() ? 'text-rose-600' : 'text-slate-400'
                       }`}>
                         {new Date(bill.dueDate).toLocaleDateString('pt-BR')}
@@ -223,7 +223,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ bills, suppliers, accounts
             {filteredBills.filter(b => b.status !== BillStatus.PAID).length === 0 && (
               <div className="text-center py-12">
                 <div className="text-slate-200 flex justify-center mb-2"><CreditCard size={32} /></div>
-                <p className="text-slate-400 text-xs font-bold uppercase">Nenhuma conta pendente</p>
+                <p className="text-slate-400 text-sm font-bold uppercase">Nenhuma conta pendente</p>
               </div>
             )}
           </div>

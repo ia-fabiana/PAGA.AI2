@@ -25,6 +25,13 @@ export const Login: React.FC = () => {
     setTimeout(() => window.location.reload(), 800);
   };
 
+  const handleClearData = () => {
+    if (window.confirm('Deseja realmente limpar todos os dados locais? Isso não pode ser desfeito.')) {
+      localStorage.clear();
+      window.location.reload();
+    }
+  };
+
   const handleAuth = async (e: React.FormEvent) => {
     e.preventDefault();
     if (isMockMode) {
@@ -68,7 +75,7 @@ export const Login: React.FC = () => {
           <p className="text-slate-500 font-medium text-sm mt-2">Gestão Financeira Inteligente</p>
           
           {isMockMode && (
-            <div className="mt-4 flex items-center justify-center gap-2 text-[10px] font-black text-amber-600 bg-amber-50 py-2 px-4 rounded-full border border-amber-100 uppercase tracking-widest mx-auto w-fit">
+            <div className="mt-4 flex items-center justify-center gap-2 text-xs font-black text-amber-600 bg-amber-50 py-2 px-4 rounded-full border border-amber-100 uppercase tracking-widest mx-auto w-fit">
               <AlertCircle size={12} /> Modo Demonstração (Local)
             </div>
           )}
@@ -76,7 +83,7 @@ export const Login: React.FC = () => {
 
         <form onSubmit={handleAuth} className="space-y-5">
           <div className="space-y-2">
-            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">E-mail Corporativo</label>
+            <label className="text-xs font-black text-slate-400 uppercase tracking-widest ml-1">E-mail Corporativo</label>
             <div className="relative">
               <Mail className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
               <input 
@@ -91,7 +98,7 @@ export const Login: React.FC = () => {
           </div>
 
           <div className="space-y-2">
-            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Sua Senha</label>
+            <label className="text-xs font-black text-slate-400 uppercase tracking-widest ml-1">Sua Senha</label>
             <div className="relative">
               <Lock className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
               <input 
@@ -105,7 +112,7 @@ export const Login: React.FC = () => {
             </div>
           </div>
 
-          {error && <p className="text-rose-500 text-[10px] font-black text-center uppercase tracking-tight">{error}</p>}
+          {error && <p className="text-rose-500 text-xs font-black text-center uppercase tracking-tight">{error}</p>}
 
           <div className="flex flex-col gap-3">
             <button 
@@ -129,9 +136,18 @@ export const Login: React.FC = () => {
         </form>
 
         <div className="mt-8 text-center">
-          <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">
+          <p className="text-xs text-slate-400 font-bold uppercase tracking-widest">
             {isMockMode ? "Dados salvos localmente no seu PC" : "Conectado ao Firebase Cloud"}
           </p>
+          {isMockMode && (
+            <button
+              type="button"
+              onClick={handleClearData}
+              className="mt-4 text-xs font-bold text-amber-600 hover:text-amber-700 uppercase tracking-widest underline"
+            >
+              🗑️ Limpar Todos os Dados
+            </button>
+          )}
         </div>
       </div>
     </div>
