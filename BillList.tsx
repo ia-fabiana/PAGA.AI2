@@ -26,6 +26,38 @@ export const BillList: React.FC<BillListProps> = ({ bills, suppliers, accounts, 
   const [endDate, setEndDate] = useState('');
   const [showPdfPreview, setShowPdfPreview] = useState(false);
   const [pdfPreviewUrl, setPdfPreviewUrl] = useState('');
+  const [romaneioWeekFilter, setRomaneioWeekFilter] = useState(''); // Sábado da semana para filtrar romaneio
+
+  // Funções auxiliares para semanas (sábado a sexta)
+  const getLastSaturday = (date: Date): Date => {
+    const d = new Date(date);
+    const day = d.getDay();
+    const diff = day === 6 ? 0 : (day === 0 ? 1 : day + 1); // Se sábado, diff=0, senão vai para sábado anterior
+    const lastSat = new Date(d.setDate(d.getDate() - diff));
+    return lastSat;
+  };
+
+  const getWeekSaturday = (dateStr: string): string | null => {
+    const date = new Date(dateStr);
+    const sat = getLastSaturday(date);
+    return sat.toISOString().split('T')[0]; // Retorna YYYY-MM-DD
+  };
+
+  const getAvailableWeeks = (): Array<{ satDate: string; label: string }> => {
+    const weeks: Array<{ satDate: string; label: string }> = [];
+    const today = new Date();
+    const currentSat = getLastSaturday(today);
+    
+    for (let i = -2; i <= 4; i++) {
+      const weekSat = new Date(currentSat);
+      weekSat.setDate(weekSat.getDate() + i * 7);
+      const satStr = weekSat.toISOString().split('T')[0];
+      const friStr = new Date(weekSat.getTime() + 6 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+      const label = `${weekSat.toLocaleDateString('pt-BR', { month: 'short', day: 'numeric' })} - ${new Date(weekSat.getTime() + 6 * 24 * 60 * 60 * 1000).toLocaleDateString('pt-BR', { month: 'short', day: 'numeric' })}`;
+      weeks.push({ satDate: satStr, label });
+    }
+    return weeks;
+  };
 
   const filteredBills = useMemo(() => {
     return bills.filter(bill => {
@@ -153,6 +185,13 @@ export const BillList: React.FC<BillListProps> = ({ bills, suppliers, accounts, 
     }
   };
 
+  const handleRomaneioWeekChange = (billId: string, weekSatDate: string | null) => {
+    const bill = bills.find(b => b.id === billId);
+    if (!bill) return;
+    
+    onEdit({ ...bill, romaneioWeek: weekSatDate || undefined });
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -231,6 +270,19 @@ export const BillList: React.FC<BillListProps> = ({ bills, suppliers, accounts, 
             onChange={(e) => setEndDate(e.target.value)} 
           />
         </div>
+
+        <div className="relative">
+          <select 
+            className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2 focus:ring-2 focus:ring-indigo-500 outline-none text-sm appearance-none font-bold text-indigo-700" 
+            value={romaneioWeekFilter} 
+            onChange={(e) => setRomaneioWeekFilter(e.target.value)}
+          >
+            <option value="">📋 Todas as Semanas</option>
+            {getAvailableWeeks().map(w => (
+              <option key={w.satDate} value={w.satDate}>📅 Semana {w.label}</option>
+            ))}
+          </select>
+        </div>
       </div>
 
       <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
@@ -243,6 +295,7 @@ export const BillList: React.FC<BillListProps> = ({ bills, suppliers, accounts, 
                 <th className="px-6 py-4 text-sm font-semibold text-slate-500 uppercase tracking-wider">Plano de Contas</th>
                 <th className="px-6 py-4 text-sm font-semibold text-slate-500 uppercase tracking-wider">Vencimento</th>
                 <th className="px-6 py-4 text-sm font-semibold text-slate-500 uppercase tracking-wider">Data de Pagamento</th>
+                <th className="px-6 py-4 text-sm font-semibold text-slate-500 uppercase tracking-wider">Romaneio</th>
                 <th className="px-6 py-4 text-sm font-semibold text-slate-500 uppercase tracking-wider">Valor</th>
                 <th className="px-6 py-4 text-sm font-semibold text-slate-500 uppercase tracking-wider text-right">Ações</th>
               </tr>
@@ -299,6 +352,24 @@ export const BillList: React.FC<BillListProps> = ({ bills, suppliers, accounts, 
                       ) : (
                         <span className="text-sm text-slate-600">
                           {bill.paidDate ? new Date(bill.paidDate).toLocaleDateString('pt-BR') : '—'}
+                        </span>
+                      )}
+                    </td>
+                    <td className="px-6 py-4">
+                      {canEdit ? (
+                        <select
+                          value={bill.romaneioWeek || ''}
+                          onChange={(e) => handleRomaneioWeekChange(bill.id, e.target.value || null)}
+                          className="w-full px-2 py-1 text-xs border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none bg-white hover:border-slate-300 transition-colors font-semibold"
+                        >
+                          <option value="">—</option>
+                          {getAvailableWeeks().map(w => (
+                            <option key={w.satDate} value={w.satDate}>{w.label}</option>
+                          ))}
+                        </select>
+                      ) : (
+                        <span className="text-xs text-slate-600 font-semibold">
+                          {bill.romaneioWeek ? getAvailableWeeks().find(w => w.satDate === bill.romaneioWeek)?.label || '—' : '—'}
                         </span>
                       )}
                     </td>
