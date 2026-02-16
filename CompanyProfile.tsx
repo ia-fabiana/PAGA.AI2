@@ -1,6 +1,6 @@
 
 import React, { useState } from 'react';
-import { Company } from '../types';
+import { Company } from './types';
 import { Save, Building2, MapPin, Phone, Mail, Hash } from 'lucide-react';
 
 interface CompanyProfileProps {

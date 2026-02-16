@@ -1,6 +1,6 @@
 
 import React from 'react';
-import { Supplier, ChartOfAccount, UserRole } from '../types';
+import { Supplier, ChartOfAccount, UserRole } from './types';
 import { Plus, Search, Edit2, Trash2, Mail, Hash, ListTree } from 'lucide-react';
 
 interface SupplierListProps {

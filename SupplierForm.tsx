@@ -1,6 +1,6 @@
 
 import React, { useState } from 'react';
-import { Supplier, ChartOfAccount } from '../types';
+import { Supplier, ChartOfAccount } from './types';
 import { X, User, ShieldCheck, Mail, ListTree } from 'lucide-react';
 
 interface SupplierFormProps {

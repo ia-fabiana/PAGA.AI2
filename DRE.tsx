@@ -1,6 +1,6 @@
 
 import React, { useMemo, useState } from 'react';
-import { Bill, Revenue, ChartOfAccount, DreCategory } from '../types';
+import { Bill, Revenue, ChartOfAccount, DreCategory } from './types';
 import { TrendingUp, Edit3, Check, FileDown, AlertCircle } from 'lucide-react';
 import { jsPDF } from 'jspdf';
 import 'jspdf-autotable';

@@ -1,16 +1,16 @@
 
 import React, { useState, useEffect } from 'react';
-import { Layout } from './components/Layout';
-import { Dashboard } from './components/Dashboard';
-import { BillList } from './components/BillList';
-import { SupplierList } from './components/SupplierList';
-import { BillForm } from './components/BillForm';
-import { SupplierForm } from './components/SupplierForm';
-import { TeamManagement } from './components/TeamManagement';
-import { CompanyProfile } from './components/CompanyProfile';
-import { AccountManagement } from './components/AccountManagement';
-import { DRE } from './components/DRE';
-import { Login } from './components/Login';
+import { Layout } from './Layout';
+import { Dashboard } from './Dashboard';
+import { BillList } from './BillList';
+import { SupplierList } from './SupplierList';
+import { BillForm } from './BillForm';
+import { SupplierForm } from './SupplierForm';
+import { TeamManagement } from './TeamManagement';
+import { CompanyProfile } from './CompanyProfile';
+import { AccountManagement } from './AccountManagement';
+import { DRE } from './DRE';
+import { Login } from './Login';
 import { auth, db, isMockMode } from './firebase';
 import { Bill, Supplier, BillStatus, UserRole, TeamMember, Company, ChartOfAccount, Revenue } from './types';
 import { Loader2 } from 'lucide-react';

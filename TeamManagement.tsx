@@ -1,6 +1,6 @@
 
 import React, { useState } from 'react';
-import { TeamMember, UserRole, ModulePermissions } from '../types';
+import { TeamMember, UserRole, ModulePermissions } from './types';
 import { 
   UserPlus, Shield, Mail, Trash2, CheckCircle, XCircle, 
   LayoutDashboard, Receipt, Users, ListTree, Building2, 

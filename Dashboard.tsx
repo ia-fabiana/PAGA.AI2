@@ -1,6 +1,6 @@
 
 import React, { useMemo, useState } from 'react';
-import { Bill, Supplier, BillStatus, ChartOfAccount } from '../types';
+import { Bill, Supplier, BillStatus, ChartOfAccount } from './types';
 import { TrendingUp, CreditCard, Clock, AlertCircle, Calendar, Filter, Target, Zap } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, PieChart, Pie } from 'recharts';
 
