@@ -53,7 +53,8 @@ export const DRE: React.FC<DREProps> = ({ bills, revenues, accounts, setRevenues
   const getMonthDetails = (monthIndex: number, category: DreCategory | 'REVENUE' | 'GROSS_PROFIT' | 'NET_PROFIT', isEstimate = false) => {
     const monthBills = bills.filter(b => {
       if (isEstimate) {
-        if (b.status === BillStatus.PAID || !b.isEstimate) return false;
+        // Todas as despesas provisionadas, independente de status
+        if (!b.isEstimate) return false;
       } else if (b.status !== BillStatus.PAID) {
         return false;
       }
@@ -108,7 +109,8 @@ export const DRE: React.FC<DREProps> = ({ bills, revenues, accounts, setRevenues
       });
 
       const monthEstimateBills = bills.filter(b => {
-        if (b.status === BillStatus.PAID || !b.isEstimate) return false;
+        // Todas as despesas provisionadas, independente de status
+        if (!b.isEstimate) return false;
         return getMonthIndex(b.dueDate) === index && getYearValue(b.dueDate) === currentYear;
       });
 
