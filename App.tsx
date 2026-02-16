@@ -39,6 +39,7 @@ const App: React.FC = () => {
   const seededRecurringBillsRef = useRef(false);
   const seededPaidBillsRef = useRef(false);
   const seededSuppliersRef = useRef(false);
+  const seededImportedBillsRef = useRef(false);
   const currentYear = new Date().getFullYear();
   const currentMonth = new Date().getMonth();
 
@@ -122,6 +123,36 @@ const App: React.FC = () => {
     const existingIds = new Set(existing.map((b) => b.id));
     const added = buildRecurringBillsForYear(defaultRecurringBills, currentYear, currentMonth, existingIds);
     return { merged: [...existing, ...added], added };
+  };
+
+  const loadImportedBills = async (existing: Bill[]) => {
+    try {
+      const response = await fetch('/seed-bills.json');
+      if (!response.ok) {
+        console.warn('Arquivo seed-bills.json não encontrado');
+        return existing;
+      }
+      
+      const seedData = await response.json();
+      const imported = seedData.map((item: any, idx: number) => ({
+        id: `seed-${Date.now()}-${idx}`,
+        supplierId: '',
+        description: item.description,
+        amount: item.amount || 0,
+        dueDate: item.dueDate,
+        observations: item.observations,
+        status: BillStatus.PENDING,
+        recurrenceType: 'none' as const,
+        accountId: '27', // Default PRODUCT_COST
+        isEstimate: false,
+      }));
+
+      console.log(`✅ Carregadas ${imported.length} contas do seed-bills.json`);
+      return [...existing, ...imported];
+    } catch (e) {
+      console.error('Erro ao carregar seed-bills.json:', e);
+      return existing;
+    }
   };
 
   const defaultAccounts: ChartOfAccount[] = [
@@ -378,6 +409,19 @@ const App: React.FC = () => {
       clearTimeout(safetyTimeout);
     };
   }, []);
+
+  // Carregar contas importadas do seed-bills.json
+  useEffect(() => {
+    if (isMockMode && user && !seededImportedBillsRef.current && bills.length > 0) {
+      seededImportedBillsRef.current = true;
+      loadImportedBills(bills).then(merged => {
+        if (merged.length > bills.length) {
+          setBills(merged);
+          console.log(`📥 ${merged.length - bills.length} contas importadas adicionadas`);
+        }
+      });
+    }
+  }, [user, bills.length, isMockMode]);
 
   useEffect(() => {
     if (isMockMode && user) {
