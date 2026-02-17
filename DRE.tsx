@@ -299,8 +299,8 @@ export const DRE: React.FC<DREProps> = ({ bills, revenues, accounts, setRevenues
           <p className="text-slate-500 font-bold uppercase text-xs tracking-widest mt-1">Resumo Consolidado das Telas de Gestão</p>
         </div>
         <div className="hidden md:flex items-center gap-3">
-          <span className="px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest bg-slate-900 text-white">Real</span>
-          <span className="px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest bg-amber-200 text-amber-900">Estimado</span>
+          <span className="px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest bg-amber-200 text-amber-900">Real</span>
+          <span className="px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest bg-slate-900 text-white">Estimado</span>
         </div>
       </div>
 
@@ -330,7 +330,7 @@ export const DRE: React.FC<DREProps> = ({ bills, revenues, accounts, setRevenues
               <tr className="bg-slate-800 text-slate-200">
                 {months.map(m => (
                   <React.Fragment key={`${m}-sub`}>
-                    <th className="px-3 py-2 text-center text-[10px] font-black uppercase border-r border-slate-700/80">Real</th>
+                    <th className="px-3 py-2 text-center text-[10px] font-black uppercase border-r border-slate-700/80 bg-amber-200 text-amber-900">Real</th>
                     <th className="px-3 py-2 text-center text-[10px] font-black uppercase border-r border-slate-700/80">Estimado</th>
                   </React.Fragment>
                 ))}
@@ -391,8 +391,8 @@ export const DRE: React.FC<DREProps> = ({ bills, revenues, accounts, setRevenues
                 <td className="px-6 py-4 text-sm font-bold text-rose-700 sticky left-0 z-10 bg-white uppercase">(-) ABA: PRODUTOS</td>
                 {dreData.map((d, i) => (
                   <React.Fragment key={i}>
-                    <td className="px-4 py-4 text-center text-sm text-slate-700 cursor-pointer hover:bg-slate-50 transition-colors" onClick={() => handleCellClick(i, 'PRODUCT_COST', d.products)}>{fmt(d.products)}</td>
-                    <td className="px-4 py-4 text-center text-sm text-amber-900 bg-amber-50 cursor-pointer hover:bg-amber-100 transition-colors" onClick={() => handleCellClick(i, 'PRODUCT_COST', d.estProducts, true)}>{fmt(d.estProducts)}</td>
+                    <td className="px-4 py-4 text-center text-sm text-amber-900 bg-amber-50 cursor-pointer hover:bg-amber-100 transition-colors" onClick={() => handleCellClick(i, 'PRODUCT_COST', d.products)}>{fmt(d.products)}</td>
+                    <td className="px-4 py-4 text-center text-sm text-slate-700 cursor-pointer hover:bg-slate-50 transition-colors" onClick={() => handleCellClick(i, 'PRODUCT_COST', d.estProducts, true)}>{fmt(d.estProducts)}</td>
                   </React.Fragment>
                 ))}
               </tr>
@@ -407,8 +407,8 @@ export const DRE: React.FC<DREProps> = ({ bills, revenues, accounts, setRevenues
                 </td>
                 {dreData.map((d, i) => (
                   <React.Fragment key={i}>
-                    <td className="px-4 py-4 text-center text-sm text-indigo-900">{fmt(d.grossProfit)}</td>
-                    <td className="px-4 py-4 text-center text-sm text-amber-900 bg-amber-100">{fmt(d.estGrossProfit)}</td>
+                    <td className="px-4 py-4 text-center text-sm text-amber-900 bg-amber-100">{fmt(d.grossProfit)}</td>
+                    <td className="px-4 py-4 text-center text-sm text-indigo-900">{fmt(d.estGrossProfit)}</td>
                   </React.Fragment>
                 ))}
               </tr>
@@ -418,8 +418,8 @@ export const DRE: React.FC<DREProps> = ({ bills, revenues, accounts, setRevenues
                 <td className="px-6 py-4 text-sm font-bold text-slate-600 sticky left-0 z-10 bg-white uppercase">(-) ABA: COMISSÕES</td>
                 {dreData.map((d, i) => (
                   <React.Fragment key={i}>
-                    <td className="px-4 py-4 text-center text-sm text-slate-700 cursor-pointer hover:bg-slate-50 transition-colors" onClick={() => handleCellClick(i, 'COMMISSION', d.commissions)}>{fmt(d.commissions)}</td>
-                    <td className="px-4 py-4 text-center text-sm text-amber-900 bg-amber-50 cursor-pointer hover:bg-amber-100 transition-colors" onClick={() => handleCellClick(i, 'COMMISSION', d.estCommissions, true)}>{fmt(d.estCommissions)}</td>
+                    <td className="px-4 py-4 text-center text-sm text-amber-900 bg-amber-50 cursor-pointer hover:bg-amber-100 transition-colors" onClick={() => handleCellClick(i, 'COMMISSION', d.commissions)}>{fmt(d.commissions)}</td>
+                    <td className="px-4 py-4 text-center text-sm text-slate-700 cursor-pointer hover:bg-slate-50 transition-colors" onClick={() => handleCellClick(i, 'COMMISSION', d.estCommissions, true)}>{fmt(d.estCommissions)}</td>
                   </React.Fragment>
                 ))}
               </tr>
@@ -429,8 +429,8 @@ export const DRE: React.FC<DREProps> = ({ bills, revenues, accounts, setRevenues
                 <td className="px-6 py-4 text-sm font-bold text-slate-600 sticky left-0 z-10 bg-white uppercase">(-) ABA: SALÁRIO FIXO</td>
                 {dreData.map((d, i) => (
                   <React.Fragment key={i}>
-                    <td className="px-4 py-4 text-center text-sm text-slate-700 cursor-pointer hover:bg-slate-50 transition-colors" onClick={() => handleCellClick(i, 'FIXED_SALARY', d.fixedSalary)}>{fmt(d.fixedSalary)}</td>
-                    <td className="px-4 py-4 text-center text-sm text-amber-900 bg-amber-50 cursor-pointer hover:bg-amber-100 transition-colors" onClick={() => handleCellClick(i, 'FIXED_SALARY', d.estFixedSalary, true)}>{fmt(d.estFixedSalary)}</td>
+                    <td className="px-4 py-4 text-center text-sm text-amber-900 bg-amber-50 cursor-pointer hover:bg-amber-100 transition-colors" onClick={() => handleCellClick(i, 'FIXED_SALARY', d.fixedSalary)}>{fmt(d.fixedSalary)}</td>
+                    <td className="px-4 py-4 text-center text-sm text-slate-700 cursor-pointer hover:bg-slate-50 transition-colors" onClick={() => handleCellClick(i, 'FIXED_SALARY', d.estFixedSalary, true)}>{fmt(d.estFixedSalary)}</td>
                   </React.Fragment>
                 ))}
               </tr>
@@ -440,8 +440,8 @@ export const DRE: React.FC<DREProps> = ({ bills, revenues, accounts, setRevenues
                 <td className="px-6 py-4 text-sm font-bold text-slate-600 sticky left-0 z-10 bg-white uppercase">(-) ABA: DESP. FIXAS</td>
                 {dreData.map((d, i) => (
                   <React.Fragment key={i}>
-                    <td className="px-4 py-4 text-center text-sm text-slate-700 cursor-pointer hover:bg-slate-50 transition-colors" onClick={() => handleCellClick(i, 'FIXED_EXPENSES', d.fixedExpenses)}>{fmt(d.fixedExpenses)}</td>
-                    <td className="px-4 py-4 text-center text-sm text-amber-900 bg-amber-50 cursor-pointer hover:bg-amber-100 transition-colors" onClick={() => handleCellClick(i, 'FIXED_EXPENSES', d.estFixedExpenses, true)}>{fmt(d.estFixedExpenses)}</td>
+                    <td className="px-4 py-4 text-center text-sm text-amber-900 bg-amber-50 cursor-pointer hover:bg-amber-100 transition-colors" onClick={() => handleCellClick(i, 'FIXED_EXPENSES', d.fixedExpenses)}>{fmt(d.fixedExpenses)}</td>
+                    <td className="px-4 py-4 text-center text-sm text-slate-700 cursor-pointer hover:bg-slate-50 transition-colors" onClick={() => handleCellClick(i, 'FIXED_EXPENSES', d.estFixedExpenses, true)}>{fmt(d.estFixedExpenses)}</td>
                   </React.Fragment>
                 ))}
               </tr>
@@ -451,8 +451,8 @@ export const DRE: React.FC<DREProps> = ({ bills, revenues, accounts, setRevenues
                 <td className="px-6 py-4 text-xs font-bold text-slate-600 sticky left-0 z-10 bg-white uppercase">(-) ABA: DESP. VARIÁVEIS</td>
                 {dreData.map((d, i) => (
                   <React.Fragment key={i}>
-                    <td className="px-4 py-4 text-center text-xs text-slate-700 cursor-pointer hover:bg-slate-50 transition-colors" onClick={() => handleCellClick(i, 'VARIABLE_EXPENSES', d.variableExpenses)}>{fmt(d.variableExpenses)}</td>
-                    <td className="px-4 py-4 text-center text-xs text-amber-900 bg-amber-50 cursor-pointer hover:bg-amber-100 transition-colors" onClick={() => handleCellClick(i, 'VARIABLE_EXPENSES', d.estVariableExpenses, true)}>{fmt(d.estVariableExpenses)}</td>
+                    <td className="px-4 py-4 text-center text-xs text-amber-900 bg-amber-50 cursor-pointer hover:bg-amber-100 transition-colors" onClick={() => handleCellClick(i, 'VARIABLE_EXPENSES', d.variableExpenses)}>{fmt(d.variableExpenses)}</td>
+                    <td className="px-4 py-4 text-center text-xs text-slate-700 cursor-pointer hover:bg-slate-50 transition-colors" onClick={() => handleCellClick(i, 'VARIABLE_EXPENSES', d.estVariableExpenses, true)}>{fmt(d.estVariableExpenses)}</td>
                   </React.Fragment>
                 ))}
               </tr>
@@ -462,8 +462,8 @@ export const DRE: React.FC<DREProps> = ({ bills, revenues, accounts, setRevenues
                 <td className="px-6 py-4 text-xs font-bold text-slate-600 sticky left-0 z-10 bg-white uppercase">(-) JUROS E MULTAS</td>
                 {dreData.map((d, i) => (
                   <React.Fragment key={i}>
-                    <td className="px-4 py-4 text-center text-xs text-slate-700 cursor-pointer hover:bg-slate-50 transition-colors" onClick={() => d.interest !== 0 && handleCellClick(i, 'INTEREST', d.interest)}>{fmt(d.interest)}</td>
-                    <td className="px-4 py-4 text-center text-xs text-amber-900 bg-amber-50">{fmt(d.estInterest)}</td>
+                    <td className="px-4 py-4 text-center text-xs text-amber-900 bg-amber-50 cursor-pointer hover:bg-amber-100 transition-colors" onClick={() => d.interest !== 0 && handleCellClick(i, 'INTEREST', d.interest)}>{fmt(d.interest)}</td>
+                    <td className="px-4 py-4 text-center text-xs text-slate-700">{fmt(d.estInterest)}</td>
                   </React.Fragment>
                 ))}
               </tr>
@@ -473,8 +473,8 @@ export const DRE: React.FC<DREProps> = ({ bills, revenues, accounts, setRevenues
                 <td className="px-6 py-4 text-xs font-bold text-slate-600 sticky left-0 z-10 bg-white uppercase">(-) ABA: PRO-LABORE</td>
                 {dreData.map((d, i) => (
                   <React.Fragment key={i}>
-                    <td className="px-4 py-4 text-center text-xs text-slate-700 cursor-pointer hover:bg-slate-50 transition-colors" onClick={() => handleCellClick(i, 'PRO_LABORE', d.proLabore)}>{fmt(d.proLabore)}</td>
-                    <td className="px-4 py-4 text-center text-xs text-amber-900 bg-amber-50 cursor-pointer hover:bg-amber-100 transition-colors" onClick={() => handleCellClick(i, 'PRO_LABORE', d.estProLabore, true)}>{fmt(d.estProLabore)}</td>
+                    <td className="px-4 py-4 text-center text-xs text-amber-900 bg-amber-50 cursor-pointer hover:bg-amber-100 transition-colors" onClick={() => handleCellClick(i, 'PRO_LABORE', d.proLabore)}>{fmt(d.proLabore)}</td>
+                    <td className="px-4 py-4 text-center text-xs text-slate-700 cursor-pointer hover:bg-slate-50 transition-colors" onClick={() => handleCellClick(i, 'PRO_LABORE', d.estProLabore, true)}>{fmt(d.estProLabore)}</td>
                   </React.Fragment>
                 ))}
               </tr>
@@ -484,10 +484,10 @@ export const DRE: React.FC<DREProps> = ({ bills, revenues, accounts, setRevenues
                 <td className="px-6 py-6 text-sm sticky left-0 z-20 bg-slate-900 uppercase">LUCRO OU PREJUÍZO LÍQUIDO</td>
                 {dreData.map((d, i) => (
                   <React.Fragment key={i}>
-                    <td className={`px-4 py-6 text-center text-xs ${d.netProfit >= 0 ? 'bg-emerald-600' : 'bg-rose-600'}`}>
+                    <td className={`px-4 py-6 text-center text-xs ${d.netProfit >= 0 ? 'bg-amber-200 text-amber-900' : 'bg-rose-200 text-rose-900'}`}>
                       {fmt(d.netProfit)}
                     </td>
-                    <td className={`px-4 py-6 text-center text-xs ${d.estNetProfit >= 0 ? 'bg-amber-200 text-amber-900' : 'bg-rose-200 text-rose-900'}`}>
+                    <td className={`px-4 py-6 text-center text-xs ${d.estNetProfit >= 0 ? 'bg-emerald-600 text-white' : 'bg-rose-600 text-white'}`}>
                       {fmt(d.estNetProfit)}
                     </td>
                   </React.Fragment>

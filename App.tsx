@@ -66,6 +66,8 @@ const App: React.FC = () => {
     { id: 'rec-8', supplierId: '21', description: 'FRANQUEADORA - TAXA DE PUBLICIDADE', amount: 1784.81, dueDate: '2026-02-25', status: BillStatus.PENDING, recurrenceType: 'monthly', totalInstallments: 12, accountId: '25', isEstimate: true },
     { id: 'rec-9', supplierId: '', description: 'IPTU - CARLOS WEBER 1048', amount: 1772.62, dueDate: '2026-02-25', status: BillStatus.PENDING, recurrenceType: 'monthly', totalInstallments: 12, accountId: '16', isEstimate: true },
     { id: 'rec-10', supplierId: '', description: 'SABESP - ÁGUA', amount: 2070.86, dueDate: '2026-02-25', status: BillStatus.PENDING, recurrenceType: 'monthly', totalInstallments: 12, accountId: '2', isEstimate: true },
+    { id: 'rec-11', supplierId: '', description: 'FOLHA DE PAGAMENTO DIA 05 - COMISSÕES - GESTOR ADMINISTRATIVO - PROLABORE - FABIANA', amount: 13000.00, dueDate: '2026-02-05', status: BillStatus.PENDING, recurrenceType: 'monthly', totalInstallments: 12, accountId: '97', isEstimate: true },
+    { id: 'rec-12', supplierId: '', description: 'FOLHA DE PAGAMENTO DIA 05 - COMISSÕES - GESTOR ADMINISTRATIVO - PROLABORE - CAIO', amount: 13000.00, dueDate: '2026-02-05', status: BillStatus.PENDING, recurrenceType: 'monthly', totalInstallments: 12, accountId: '98', isEstimate: true },
   ];
 
   // Contas pagas são adicionadas apenas quando o usuário marca manualmente com paidDate
@@ -285,6 +287,7 @@ const App: React.FC = () => {
     
     // PRÓ-LABORE
     { id: '97', name: 'GESTOR ADMINISTRATIVO - PROLABORE - FABIANA', category: 'PRO_LABORE', type: 'FIXED' },
+    { id: '98', name: 'GESTOR ADMINISTRATIVO - PROLABORE - CAIO', category: 'PRO_LABORE', type: 'FIXED' },
   ];
 
   const defaultSuppliers: Supplier[] = [

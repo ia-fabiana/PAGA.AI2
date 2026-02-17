@@ -16,6 +16,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ bills, suppliers, accounts
   const now = new Date();
   const firstDay = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0];
   const lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().split('T')[0];
+  const currentYear = now.getFullYear();
 
   const [startDate, setStartDate] = useState(firstDay);
   const [endDate, setEndDate] = useState(lastDay);
@@ -36,9 +37,15 @@ export const Dashboard: React.FC<DashboardProps> = ({ bills, suppliers, accounts
     });
   }, [bills, startDate, endDate]);
 
+  const toDate = (dateStr: string) => new Date(`${dateStr}T12:00:00`);
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const isPaid = (bill: Bill) => bill.status === BillStatus.PAID || Boolean(bill.paidDate);
+  const isOverdue = (bill: Bill) => !isPaid(bill) && toDate(bill.dueDate) < today;
+
   const totalPending = filteredBills.filter(b => b.status === BillStatus.PENDING).reduce((sum, b) => sum + b.amount, 0);
-  const totalPaid = filteredBills.filter(b => b.status === BillStatus.PAID).reduce((sum, b) => sum + b.amount, 0);
-  const totalOverdue = filteredBills.filter(b => b.status === BillStatus.OVERDUE).reduce((sum, b) => sum + b.amount, 0);
+  const totalPaid = filteredBills.filter(b => isPaid(b)).reduce((sum, b) => sum + b.amount, 0);
+  const totalOverdue = filteredBills.filter(b => isOverdue(b)).reduce((sum, b) => sum + b.amount, 0);
 
   // Cálculo de Fixas vs Variáveis
   const typeStats = useMemo(() => {
@@ -65,15 +72,33 @@ export const Dashboard: React.FC<DashboardProps> = ({ bills, suppliers, accounts
 
   const chartData = useMemo(() => {
     const months = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
-    const data = months.map(m => ({ name: m, total: 0 }));
-    
-    filteredBills.forEach(bill => {
-      const monthIndex = new Date(bill.dueDate).getMonth();
-      data[monthIndex].total += bill.amount;
+    const data = months.map(m => ({ name: m, real: 0, estimated: 0 }));
+
+    const getMonthIndexSafe = (dateStr: string) => {
+      const [yearStr, monthStr] = dateStr.split('-');
+      const year = Number(yearStr);
+      const month = Number(monthStr);
+      if (!year || !month) return null;
+      return { year, monthIndex: month - 1 };
+    };
+
+    bills.forEach(bill => {
+      const dueParts = getMonthIndexSafe(bill.dueDate);
+      if (dueParts && dueParts.year === currentYear) {
+        data[dueParts.monthIndex].estimated += bill.amount;
+      }
+
+      if (bill.status === BillStatus.PAID || bill.paidDate) {
+        const paidRef = bill.paidDate || bill.dueDate;
+        const paidParts = getMonthIndexSafe(paidRef);
+        if (paidParts && paidParts.year === currentYear) {
+          data[paidParts.monthIndex].real += bill.amount;
+        }
+      }
     });
-    
+
     return data;
-  }, [filteredBills]);
+  }, [bills, currentYear]);
 
   const resetToCurrentMonth = () => {
     setStartDate(firstDay);
@@ -164,7 +189,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ bills, suppliers, accounts
         <div className="lg:col-span-2 bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
           <h3 className="text-lg font-semibold mb-6 flex items-center gap-2">
             <Calendar className="text-blue-600" size={20} />
-            Evolução Mensal (Filtrado)
+            Evolução Mensal (Ano)
           </h3>
           <div className="h-[300px]">
             <ResponsiveContainer width="100%" height="100%">
@@ -177,11 +202,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ bills, suppliers, accounts
                   contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1)' }}
                   formatter={(value: number) => currencyFormatter(value)}
                 />
-                <Bar dataKey="total" radius={[6, 6, 0, 0]}>
-                  {chartData.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={index === new Date().getMonth() ? '#2563eb' : '#cbd5e1'} />
-                  ))}
-                </Bar>
+                <Bar dataKey="estimated" name="Estimado" radius={[6, 6, 0, 0]} fill="#cbd5e1" />
+                <Bar dataKey="real" name="Real" radius={[6, 6, 0, 0]} fill="#f59e0b" />
               </BarChart>
             </ResponsiveContainer>
           </div>

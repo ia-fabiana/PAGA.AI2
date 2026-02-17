@@ -74,6 +74,15 @@ export const BillList: React.FC<BillListProps> = ({ bills, suppliers, accounts, 
     return weeks;
   };
 
+  // Helper functions to detect overdue status dynamically
+  const toDate = (dateStr: string) => new Date(`${dateStr}T12:00:00`);
+  const isPaid = (bill: Bill) => bill.status === BillStatus.PAID || Boolean(bill.paidDate);
+  const isOverdue = (bill: Bill) => {
+    const today = new Date();
+    today.setHours(12, 0, 0, 0);
+    return !isPaid(bill) && toDate(bill.dueDate) < today;
+  };
+
   const filteredBills = useMemo(() => {
     return bills.filter(bill => {
       const supplier = suppliers.find(s => s.id === bill.supplierId);
@@ -87,6 +96,7 @@ export const BillList: React.FC<BillListProps> = ({ bills, suppliers, accounts, 
       const matchesStatus =
         statusFilter === 'ALL' ||
         (statusFilter === 'OPEN' && bill.status !== BillStatus.PAID) ||
+        (statusFilter === BillStatus.OVERDUE && isOverdue(bill)) ||
         bill.status === statusFilter;
       const matchesSupplier = supplierFilter === 'ALL' || bill.supplierId === supplierFilter;
       
