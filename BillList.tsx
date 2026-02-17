@@ -100,7 +100,7 @@ export const BillList: React.FC<BillListProps> = ({ bills, suppliers, accounts, 
   }, [bills, suppliers, accounts, searchTerm, statusFilter, supplierFilter, startDate, endDate]);
 
   const canEdit = userRole !== UserRole.VIEWER;
-  const canDelete = userRole === UserRole.ADMIN;
+  const canDelete = userRole !== UserRole.VIEWER; // Qualquer usuário logado pode excluir, exceto VIEWER
   const canMarkPaid = userRole === UserRole.ADMIN;
 
   const buildPdfDoc = () => {
@@ -134,8 +134,8 @@ export const BillList: React.FC<BillListProps> = ({ bills, suppliers, accounts, 
       const typeLabel = acc?.type === 'VARIABLE' ? '(V)' : '(F)';
       const desc = b.currentInstallment ? `${b.description} (${b.currentInstallment}/${b.totalInstallments})` : b.description;
       return [
-        `${desc} ${typeLabel}`, 
         s?.name || 'N/A', 
+        `${desc} ${typeLabel}`, 
         acc?.name || 'N/A',
         new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(b.amount), 
         formatDatePtBR(b.dueDate), 
@@ -153,7 +153,7 @@ export const BillList: React.FC<BillListProps> = ({ bills, suppliers, accounts, 
         4: { cellWidth: 25, halign: 'center' },
         5: { cellWidth: 25, halign: 'center' }
       },
-      head: [['Descrição', 'Fornecedor', 'Plano de Contas', 'Valor', 'Vencimento', 'Status']], 
+      head: [['Fornecedor', 'Descrição', 'Plano de Contas', 'Valor', 'Vencimento', 'Status']], 
       body: tableData, 
       theme: 'grid', 
       headStyles: { fillStyle: '#4f46e5', textColor: '#ffffff', fontStyle: 'bold' },
@@ -191,13 +191,23 @@ export const BillList: React.FC<BillListProps> = ({ bills, suppliers, accounts, 
     if (paidDate) {
       // Quando data de pagamento é preenchida, marca como PAID
       onStatusChange(billId, BillStatus.PAID);
-      // Atualizar com a data de pagamento
+      // Atualizar com a data de pagamento e manter paidAmount se já existir
       onEdit({ ...bill, paidDate, status: BillStatus.PAID });
     } else {
-      // Quando data de pagamento é limpa, volta ao status PENDING
+      // Quando data de pagamento é limpa, volta ao status PENDING e remove paidAmount
       onStatusChange(billId, BillStatus.PENDING);
-      onEdit({ ...bill, paidDate: undefined, status: BillStatus.PENDING });
+      onEdit({ ...bill, paidDate: undefined, paidAmount: undefined, status: BillStatus.PENDING });
     }
+  };
+
+  const handlePaidAmountChange = (billId: string, paidAmount: number) => {
+    const bill = bills.find(b => b.id === billId);
+    if (!bill) return;
+    
+    // Calcula automaticamente os juros/multas (diferença entre valor pago e valor da conta)
+    const interestAmount = paidAmount ? paidAmount - bill.amount : undefined;
+    
+    onEdit({ ...bill, paidAmount: paidAmount || undefined, interestAmount });
   };
 
   const handleRomaneioWeekChange = (billId: string, weekSatDate: string | null) => {
@@ -305,11 +315,12 @@ export const BillList: React.FC<BillListProps> = ({ bills, suppliers, accounts, 
           <table className="w-full text-left border-collapse min-w-[1000px]">
             <thead>
               <tr className="bg-slate-50 border-b border-slate-200">
-                <th className="px-6 py-4 text-sm font-semibold text-slate-500 uppercase tracking-wider">Descrição / Fornecedor</th>
+                <th className="px-6 py-4 text-sm font-semibold text-slate-500 uppercase tracking-wider">Fornecedor / Descrição</th>
                 <th className="px-6 py-4 text-sm font-semibold text-slate-500 uppercase tracking-wider text-center">Tipo</th>
                 <th className="px-6 py-4 text-sm font-semibold text-slate-500 uppercase tracking-wider">Plano de Contas</th>
                 <th className="px-6 py-4 text-sm font-semibold text-slate-500 uppercase tracking-wider">Vencimento</th>
                 <th className="px-6 py-4 text-sm font-semibold text-slate-500 uppercase tracking-wider">Data de Pagamento</th>
+                <th className="px-6 py-4 text-sm font-semibold text-slate-500 uppercase tracking-wider">Valor Pago</th>                <th className="px-6 py-4 text-sm font-semibold text-slate-500 uppercase tracking-wider">Juros</th>                <th className="px-6 py-4 text-sm font-semibold text-slate-500 uppercase tracking-wider">Juros</th>
                 <th className="px-6 py-4 text-sm font-semibold text-slate-500 uppercase tracking-wider">Romaneio</th>
                 <th className="px-6 py-4 text-sm font-semibold text-slate-500 uppercase tracking-wider">Valor</th>
                 <th className="px-6 py-4 text-sm font-semibold text-slate-500 uppercase tracking-wider text-right">Ações</th>
@@ -327,11 +338,11 @@ export const BillList: React.FC<BillListProps> = ({ bills, suppliers, accounts, 
                         {bill.isEstimate && <div className="bg-amber-100 px-2 py-1 rounded text-amber-700 text-xs font-bold uppercase tracking-tight">Estimativa</div>}
                         <div>
                           <p className="font-semibold text-slate-800 text-sm">
-                            {bill.description}
-                            {bill.currentInstallment && <span className="ml-2 text-xs font-bold text-slate-400">({bill.currentInstallment}/{bill.totalInstallments})</span>}
+                            {supplier?.name || 'Fornecedor Desconhecido'}
                           </p>
                           <p className="text-sm text-slate-500 flex items-center gap-1">
-                            <User size={10} /> {supplier?.name || 'Fornecedor Desconhecido'}
+                            {bill.description}
+                            {bill.currentInstallment && <span className="ml-2 text-xs font-bold text-slate-400">({bill.currentInstallment}/{bill.totalInstallments})</span>}
                           </p>
                         </div>
                       </div>
@@ -368,6 +379,32 @@ export const BillList: React.FC<BillListProps> = ({ bills, suppliers, accounts, 
                         <span className="text-sm text-slate-600">
                           {bill.paidDate ? formatDatePtBR(bill.paidDate) : '—'}
                         </span>
+                      )}
+                    </td>
+                    <td className="px-6 py-4">
+                      {canEdit ? (
+                        <input
+                          type="number"
+                          step="0.01"
+                          value={bill.paidAmount || ''}
+                          onChange={(e) => handlePaidAmountChange(bill.id, parseFloat(e.target.value))}
+                          className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none bg-white hover:border-slate-300 transition-colors"
+                          placeholder={new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(bill.amount)}
+                          title="Valor efetivamente pago (com juros/multas ou descontos)"
+                        />
+                      ) : (
+                        <span className="text-sm text-slate-600 font-bold">
+                          {bill.paidAmount ? new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(bill.paidAmount) : '—'}
+                        </span>
+                      )}
+                    </td>
+                    <td className="px-6 py-4">
+                      {bill.interestAmount !== undefined && bill.interestAmount !== 0 ? (
+                        <span className={`text-sm font-bold ${bill.interestAmount > 0 ? 'text-rose-600' : 'text-emerald-600'}`}>
+                          {bill.interestAmount > 0 ? '+' : ''}{new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(bill.interestAmount)}
+                        </span>
+                      ) : (
+                        <span className="text-sm text-slate-400">—</span>
                       )}
                     </td>
                     <td className="px-6 py-4">

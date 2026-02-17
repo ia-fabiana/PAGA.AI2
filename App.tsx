@@ -56,16 +56,16 @@ const App: React.FC = () => {
 
   // Contas recorrentes mensais fixas
   const defaultRecurringBills: Bill[] = [
-    { id: 'rec-1', supplierId: '', description: 'LED10', amount: 1264.59, dueDate: new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().split('T')[0], status: BillStatus.PENDING, recurrenceType: 'monthly', totalInstallments: 12, accountId: '1', isEstimate: true },
-    { id: 'rec-2', supplierId: '', description: 'MANOBRISTA - RECORRENTE', amount: 3000.00, dueDate: new Date(new Date().getFullYear(), new Date().getMonth(), 5).toISOString().split('T')[0], status: BillStatus.PENDING, recurrenceType: 'monthly', totalInstallments: 12, accountId: '19', isEstimate: true },
-    { id: 'rec-3', supplierId: '', description: 'VIVO INTERNET COD 899927163920', amount: 149.58, dueDate: new Date(new Date().getFullYear(), new Date().getMonth(), 8).toISOString().split('T')[0], status: BillStatus.PENDING, recurrenceType: 'monthly', totalInstallments: 12, accountId: '35', isEstimate: true },
-    { id: 'rec-4', supplierId: '', description: 'CONTABILIDADE REPRECON', amount: 850.00, dueDate: new Date(new Date().getFullYear(), new Date().getMonth(), 15).toISOString().split('T')[0], status: BillStatus.PENDING, recurrenceType: 'monthly', totalInstallments: 12, accountId: '8', isEstimate: true },
-    { id: 'rec-5', supplierId: '', description: 'CONTBEL - CONTABILIDADE KELLY', amount: 650.00, dueDate: new Date(new Date().getFullYear(), new Date().getMonth(), 20).toISOString().split('T')[0], status: BillStatus.PENDING, recurrenceType: 'monthly', totalInstallments: 12, accountId: '42', isEstimate: true },
-    { id: 'rec-6', supplierId: '', description: 'DAS EQUIPE - MENSAL', amount: 1051.70, dueDate: new Date(new Date().getFullYear(), new Date().getMonth(), 20).toISOString().split('T')[0], status: BillStatus.PENDING, recurrenceType: 'monthly', totalInstallments: 12, accountId: '43', isEstimate: true },
-    { id: 'rec-7', supplierId: '', description: 'ALUGUEL - RGB EMPREED', amount: 17260.86, dueDate: new Date(new Date().getFullYear(), new Date().getMonth(), 25).toISOString().split('T')[0], status: BillStatus.PENDING, recurrenceType: 'monthly', totalInstallments: 12, accountId: '4', isEstimate: true },
-    { id: 'rec-8', supplierId: '', description: 'FRANQUEADORA - TAXA DE PUBLICIDADE', amount: 1784.81, dueDate: new Date(new Date().getFullYear(), new Date().getMonth(), 25).toISOString().split('T')[0], status: BillStatus.PENDING, recurrenceType: 'monthly', totalInstallments: 12, accountId: '25', isEstimate: true },
-    { id: 'rec-9', supplierId: '', description: 'IPTU - CARLOS WEBER 1048', amount: 1772.62, dueDate: new Date(new Date().getFullYear(), new Date().getMonth(), 25).toISOString().split('T')[0], status: BillStatus.PENDING, recurrenceType: 'monthly', totalInstallments: 12, accountId: '16', isEstimate: true },
-    { id: 'rec-10', supplierId: '', description: 'SABESP - ÁGUA', amount: 2070.86, dueDate: new Date(new Date().getFullYear(), new Date().getMonth(), 25).toISOString().split('T')[0], status: BillStatus.PENDING, recurrenceType: 'monthly', totalInstallments: 12, accountId: '2', isEstimate: true },
+    { id: 'rec-1', supplierId: '', description: 'LED10', amount: 1264.59, dueDate: '2026-02-01', status: BillStatus.PENDING, recurrenceType: 'monthly', totalInstallments: 12, accountId: '1', isEstimate: true },
+    { id: 'rec-2', supplierId: '', description: 'MANOBRISTA - RECORRENTE', amount: 3000.00, dueDate: '2026-02-05', status: BillStatus.PENDING, recurrenceType: 'monthly', totalInstallments: 12, accountId: '19', isEstimate: true },
+    { id: 'rec-3', supplierId: '', description: 'VIVO INTERNET COD 899927163920', amount: 149.58, dueDate: '2026-02-08', status: BillStatus.PENDING, recurrenceType: 'monthly', totalInstallments: 12, accountId: '35', isEstimate: true },
+    { id: 'rec-4', supplierId: '', description: 'CONTABILIDADE REPRECON', amount: 850.00, dueDate: '2026-02-15', status: BillStatus.PENDING, recurrenceType: 'monthly', totalInstallments: 12, accountId: '8', isEstimate: true },
+    { id: 'rec-5', supplierId: '', description: 'CONTBEL - CONTABILIDADE KELLY', amount: 650.00, dueDate: '2026-02-20', status: BillStatus.PENDING, recurrenceType: 'monthly', totalInstallments: 12, accountId: '42', isEstimate: true },
+    { id: 'rec-6', supplierId: '', description: 'DAS EQUIPE - MENSAL', amount: 1051.70, dueDate: '2026-02-20', status: BillStatus.PENDING, recurrenceType: 'monthly', totalInstallments: 12, accountId: '43', isEstimate: true },
+    { id: 'rec-7', supplierId: '', description: 'ALUGUEL - RGB EMPREED', amount: 17260.86, dueDate: '2026-02-25', status: BillStatus.PENDING, recurrenceType: 'monthly', totalInstallments: 12, accountId: '4', isEstimate: true },
+    { id: 'rec-8', supplierId: '21', description: 'FRANQUEADORA - TAXA DE PUBLICIDADE', amount: 1784.81, dueDate: '2026-02-25', status: BillStatus.PENDING, recurrenceType: 'monthly', totalInstallments: 12, accountId: '25', isEstimate: true },
+    { id: 'rec-9', supplierId: '', description: 'IPTU - CARLOS WEBER 1048', amount: 1772.62, dueDate: '2026-02-25', status: BillStatus.PENDING, recurrenceType: 'monthly', totalInstallments: 12, accountId: '16', isEstimate: true },
+    { id: 'rec-10', supplierId: '', description: 'SABESP - ÁGUA', amount: 2070.86, dueDate: '2026-02-25', status: BillStatus.PENDING, recurrenceType: 'monthly', totalInstallments: 12, accountId: '2', isEstimate: true },
   ];
 
   // Contas pagas são adicionadas apenas quando o usuário marca manualmente com paidDate
@@ -110,10 +110,12 @@ const App: React.FC = () => {
     baseBills.forEach((bill) => {
       if (bill.recurrenceType !== 'monthly') return;
 
-      const baseDate = new Date(bill.dueDate);
-      const baseDay = Number.isNaN(baseDate.getTime()) ? 1 : baseDate.getDate();
+      // Extrair dia da data base sem timezone issues
+      const [, , dayStr] = bill.dueDate.split('-');
+      const baseDay = Number(dayStr) || 1;
 
-      for (let month = startMonth; month < 12; month += 1) {
+      // Gerar para TODOS OS MESES DO ANO (0 a 11), não apenas a partir do mês atual
+      for (let month = 0; month < 12; month += 1) {
         const monthKey = String(month + 1).padStart(2, '0');
         const newId = `${bill.id}-${year}-${monthKey}`;
 
@@ -121,7 +123,8 @@ const App: React.FC = () => {
         if (month === currentMonth && existingIds.has(bill.id)) continue;
 
         const clampedDay = getClampedDay(year, month, baseDay);
-        const dueDate = new Date(year, month, clampedDay).toISOString().split('T')[0];
+        const dayKey = String(clampedDay).padStart(2, '0');
+        const dueDate = `${year}-${monthKey}-${dayKey}`;
 
         generated.push({
           ...bill,
@@ -254,6 +257,7 @@ const App: React.FC = () => {
     { id: '72', name: 'DAS SALÃO', category: 'VARIABLE_EXPENSES', type: 'VARIABLE' },
     { id: '73', name: 'DEVOLUÇÃO CLIENTE', category: 'VARIABLE_EXPENSES', type: 'VARIABLE' },
     { id: '74', name: 'BANCO ITAU PLANO ADAPTA', category: 'VARIABLE_EXPENSES', type: 'VARIABLE' },
+    { id: '98', name: 'JUROS E MULTAS', category: 'VARIABLE_EXPENSES', type: 'VARIABLE' },
     
     // SALÁRIOS FIXOS
     { id: '75', name: 'FOLHA DE PAGAMENTO - SALÁRIOS-05', category: 'FIXED_SALARY', type: 'FIXED' },
@@ -646,14 +650,24 @@ const App: React.FC = () => {
     setDoc(companyRef, next, { merge: true }).catch((e) => console.error('Erro ao salvar empresa:', e));
   };
 
-  const saveBill = async (bill: Bill) => {
-    if (isMockMode || !user) return;
+  const stripUndefined = <T extends Record<string, any>>(value: T): T => {
+    return Object.entries(value).reduce((acc, [key, val]) => {
+      if (val !== undefined) acc[key as keyof T] = val;
+      return acc;
+    }, {} as T);
+  };
+
+  const saveBill = async (bill: Bill): Promise<boolean> => {
+    if (isMockMode || !user) return false;
     const billsRef = collection(db, 'users', user.uid, 'bills');
     try {
-      await setDoc(doc(billsRef, bill.id), bill, { merge: true });
-      console.log('✅ Fatura salva no Firebase:', bill);
+      const payload = stripUndefined(bill);
+      await setDoc(doc(billsRef, bill.id), payload, { merge: true });
+      console.log('✅ Fatura salva no Firebase:', payload);
+      return true;
     } catch (e: any) {
       console.error('❌ Erro ao salvar fatura:', e.message);
+      return false;
     }
   };
 
@@ -670,13 +684,53 @@ const App: React.FC = () => {
 
   const handleBillSubmit = async (bill: Bill) => {
     const nextBill: Bill = { ...bill, id: bill.id || editingBill?.id || Math.random().toString(36).slice(2, 10) };
+    const isNewBill = !editingBill;
+    const wasNotRecurring = editingBill && editingBill.recurrenceType !== 'monthly';
+    const isNowRecurring = nextBill.recurrenceType === 'monthly';
+    
     if (isMockMode) {
       setBills((prev) => {
         const exists = prev.some((b) => b.id === nextBill.id);
-        return exists ? prev.map((b) => (b.id === nextBill.id ? nextBill : b)) : [...prev, nextBill];
+        let updatedBills = exists ? prev.map((b) => (b.id === nextBill.id ? nextBill : b)) : [...prev, nextBill];
+        
+        // Se é nova conta recorrente OU se mudou para recorrente, gerar instâncias mensais
+        if ((isNewBill || wasNotRecurring) && isNowRecurring) {
+          const existingIds = new Set(updatedBills.map(b => b.id));
+          const generated = buildRecurringBillsForYear([nextBill], currentYear, 0, existingIds);
+          updatedBills = [...updatedBills, ...generated];
+          console.log(`✅ Geradas ${generated.length} instâncias mensais para "${nextBill.description}"`);
+        }
+        
+        return updatedBills;
       });
     } else {
-      await saveBill(nextBill);
+      if (!user) {
+        alert('Sessao expirada. Faca login novamente para salvar.');
+        return;
+      }
+
+      const saved = await saveBill(nextBill);
+      if (!saved) {
+        alert('Nao foi possivel salvar a conta. Verifique sua conexao e tente novamente.');
+        return;
+      }
+      
+      // Se é nova conta recorrente OU se mudou para recorrente, gerar instâncias mensais no Firebase
+      if ((isNewBill || wasNotRecurring) && isNowRecurring) {
+        const existingIds = new Set(bills.map(b => b.id));
+        const generated = buildRecurringBillsForYear([nextBill], currentYear, 0, existingIds);
+        
+        if (generated.length > 0 && user) {
+          const billsRef = collection(db, 'users', user.uid, 'bills');
+          const batch = writeBatch(db);
+          generated.forEach((generatedBill) => {
+            const payload = stripUndefined(generatedBill);
+            batch.set(doc(billsRef, generatedBill.id), payload);
+          });
+          await batch.commit().catch((e) => console.error('Erro ao criar instâncias recorrentes:', e));
+          console.log(`✅ Geradas ${generated.length} instâncias mensais para "${nextBill.description}"`);
+        }
+      }
     }
     setEditingBill(undefined);
     setShowBillForm(false);
@@ -788,7 +842,7 @@ const App: React.FC = () => {
     id: user.uid,
     name: isSuperAdmin ? 'Fabiana JJVSF' : (user.displayName || 'Usuário'),
     email: user.email || '',
-    role: isSuperAdmin ? UserRole.ADMIN : UserRole.VIEWER,
+    role: UserRole.ADMIN, // Todos usuários autenticados são ADMIN
     active: true,
     permissions: {
       dashboard: true, bills: true, suppliers: true, accounts: true, team: true, profile: true, dre: true

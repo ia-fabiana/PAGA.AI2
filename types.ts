@@ -85,6 +85,8 @@ export interface Bill {
   amount: number;
   dueDate: string;
   paidDate?: string; // Data de pagamento - quando preenchida, conta é considerada paga
+  paidAmount?: number; // Valor efetivamente pago (pode incluir juros/multas ou descontos)
+  interestAmount?: number; // Diferença entre valor pago e valor da conta (juros/multas ou descontos)
   romaneioWeek?: string; // Data do sábado da semana do romaneio (YYYY-MM-DD)
   observations?: string; // Campo de observações/anotações
   status: BillStatus;

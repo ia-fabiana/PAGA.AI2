@@ -14,7 +14,7 @@ interface DREProps {
 
 interface DetailModal {
   month: number;
-  category: DreCategory | 'REVENUE' | 'GROSS_PROFIT' | 'NET_PROFIT';
+  category: DreCategory | 'REVENUE' | 'GROSS_PROFIT' | 'NET_PROFIT' | 'INTEREST';
   bills: (Bill & { accountName: string })[];
   revenues: Revenue[];
   total: number;
@@ -25,6 +25,7 @@ export const DRE: React.FC<DREProps> = ({ bills, revenues, accounts, setRevenues
   const [showDetails, setShowDetails] = useState<DetailModal | null>(null);
   const [estimateRevenueInputs, setEstimateRevenueInputs] = useState<Record<number, string>>({});
   const [realRevenueInputs, setRealRevenueInputs] = useState<Record<number, string>>({});
+  const [selectedMonthIndex, setSelectedMonthIndex] = useState(new Date().getMonth());
   const currentYear = 2026;
 
   const months = ['JANEIRO', 'FEVEREIRO', 'MARÇO', 'ABRIL', 'MAIO', 'JUNHO', 'JULHO', 'AGOSTO', 'SETEMBRO', 'OUTUBRO', 'NOVEMBRO', 'DEZEMBRO'];
@@ -55,18 +56,19 @@ export const DRE: React.FC<DREProps> = ({ bills, revenues, accounts, setRevenues
     return new Date(dateStr).getFullYear();
   };
 
-  const getMonthDetails = (monthIndex: number, category: DreCategory | 'REVENUE' | 'GROSS_PROFIT' | 'NET_PROFIT', isEstimate = false) => {
+  const getMonthDetails = (monthIndex: number, category: DreCategory | 'REVENUE' | 'GROSS_PROFIT' | 'NET_PROFIT' | 'INTEREST', isEstimate = false) => {
     const monthBills = bills.filter(b => {
-      const isInMonth = getMonthIndex(b.dueDate) === monthIndex && getYearValue(b.dueDate) === currentYear;
-      if (!isInMonth) return false;
-      
       if (isEstimate) {
-        // Despesas com vencimento no mês (estimadas + parcelas em aberto)
-        return b.isEstimate || (b.status !== BillStatus.PAID);
-      } else {
-        // Apenas bills pagos
-        return b.status === BillStatus.PAID;
+        const isInMonth = getMonthIndex(b.dueDate) === monthIndex && getYearValue(b.dueDate) === currentYear;
+        if (!isInMonth) return false;
+        // Despesas com vencimento no mês (todas as contas: pagas, a pagar e pendentes)
+        return true;
       }
+
+      // Apenas bills pagos, usando mes do pagamento quando existir
+      if (!(b.status === BillStatus.PAID || Boolean(b.paidDate))) return false;
+      const refDate = b.paidDate || b.dueDate;
+      return getMonthIndex(refDate) === monthIndex && getYearValue(refDate) === currentYear;
     });
 
     const monthRevenues = revenues.filter(r => {
@@ -82,6 +84,9 @@ export const DRE: React.FC<DREProps> = ({ bills, revenues, accounts, setRevenues
       filteredRevenues = monthRevenues;
     } else if (category === 'GROSS_PROFIT' || category === 'NET_PROFIT') {
       filteredBills = monthBills;
+    } else if (category === 'INTEREST') {
+      // Filtrar apenas contas que têm juros/multas (interestAmount diferente de zero)
+      filteredBills = monthBills.filter(b => b.interestAmount && b.interestAmount !== 0);
     } else {
       filteredBills = monthBills.filter(b => accounts.find(a => a.id === b.accountId)?.category === category);
     }
@@ -111,23 +116,20 @@ export const DRE: React.FC<DREProps> = ({ bills, revenues, accounts, setRevenues
         .reduce((sum, r) => sum + r.amount, 0);
         
       const monthBills = bills.filter(b => {
-        // Apenas bills pagos
-        if (b.status !== BillStatus.PAID) return false;
-        return getMonthIndex(b.dueDate) === index && getYearValue(b.dueDate) === currentYear;
+        // Apenas bills pagos (usa mes do pagamento quando existir)
+        if (!(b.status === BillStatus.PAID || Boolean(b.paidDate))) return false;
+        const refDate = b.paidDate || b.dueDate;
+        return getMonthIndex(refDate) === index && getYearValue(refDate) === currentYear;
       });
 
       const monthEstimateBills = bills.filter(b => {
-        // Despesas com vencimento no mês (estimadas + parcelas em aberto)
-        const isInMonth = getMonthIndex(b.dueDate) === index && getYearValue(b.dueDate) === currentYear;
-        if (!isInMonth) return false;
-        
-        // Inclui: marcadas como estimate OU ainda não pagas (parcelas em aberto)
-        return b.isEstimate || (b.status !== BillStatus.PAID);
+        // Despesas com vencimento no mês (todas as contas: pagas, a pagar e pendentes)
+        return getMonthIndex(b.dueDate) === index && getYearValue(b.dueDate) === currentYear;
       });
 
       const getSum = (cat: DreCategory) => monthBills
         .filter(b => accounts.find(a => a.id === b.accountId)?.category === cat)
-        .reduce((sum, b) => sum + b.amount, 0);
+        .reduce((sum, b) => sum + b.amount, 0); // Usa sempre o valor original (paidAmount vai para interestAmount)
 
       const getEstimateSum = (cat: DreCategory) => monthEstimateBills
         .filter(b => accounts.find(a => a.id === b.accountId)?.category === cat)
@@ -139,6 +141,9 @@ export const DRE: React.FC<DREProps> = ({ bills, revenues, accounts, setRevenues
       const fixedExpenses = getSum('FIXED_EXPENSES');
       const variableExpenses = getSum('VARIABLE_EXPENSES');
       const proLabore = getSum('PRO_LABORE');
+      
+      // Juros e multas - soma dos valores de interestAmount (diferença entre pago e esperado)
+      const interest = monthBills.reduce((sum, b) => sum + (b.interestAmount ?? 0), 0);
 
       const estProducts = getEstimateSum('PRODUCT_COST');
       const estCommissions = getEstimateSum('COMMISSION');
@@ -146,13 +151,14 @@ export const DRE: React.FC<DREProps> = ({ bills, revenues, accounts, setRevenues
       const estFixedExpenses = getEstimateSum('FIXED_EXPENSES');
       const estVariableExpenses = getEstimateSum('VARIABLE_EXPENSES');
       const estProLabore = getEstimateSum('PRO_LABORE');
+      const estInterest = 0; // Não há estimativa de juros
 
       const grossProfit = monthRevenue - products;
-      const totalExpenses = commissions + fixedSalary + fixedExpenses + variableExpenses + proLabore;
+      const totalExpenses = commissions + fixedSalary + fixedExpenses + variableExpenses + proLabore + interest;
       const netProfit = grossProfit - totalExpenses;
 
       const estGrossProfit = monthEstimateRevenue - estProducts;
-      const estTotalExpenses = estCommissions + estFixedSalary + estFixedExpenses + estVariableExpenses + estProLabore;
+      const estTotalExpenses = estCommissions + estFixedSalary + estFixedExpenses + estVariableExpenses + estProLabore + estInterest;
       const estNetProfit = estGrossProfit - estTotalExpenses;
 
       return {
@@ -164,6 +170,7 @@ export const DRE: React.FC<DREProps> = ({ bills, revenues, accounts, setRevenues
         fixedSalary,
         fixedExpenses,
         variableExpenses,
+        interest,
         proLabore,
         netProfit,
         estProducts,
@@ -172,6 +179,7 @@ export const DRE: React.FC<DREProps> = ({ bills, revenues, accounts, setRevenues
         estFixedSalary,
         estFixedExpenses,
         estVariableExpenses,
+        estInterest,
         estProLabore,
         estNetProfit
       };
@@ -270,7 +278,7 @@ export const DRE: React.FC<DREProps> = ({ bills, revenues, accounts, setRevenues
 
   const fmt = (v: number) => v === 0 ? '-' : new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v);
 
-  const handleCellClick = (monthIndex: number, category: DreCategory | 'REVENUE' | 'GROSS_PROFIT' | 'NET_PROFIT', value: number, isEstimate = false) => {
+  const handleCellClick = (monthIndex: number, category: DreCategory | 'REVENUE' | 'GROSS_PROFIT' | 'NET_PROFIT' | 'INTEREST', value: number, isEstimate = false) => {
     if (value === 0) return;
     const { bills: detailBills, revenues: detailRevenues } = getMonthDetails(monthIndex, category, isEstimate);
     setShowDetails({
@@ -308,7 +316,13 @@ export const DRE: React.FC<DREProps> = ({ bills, revenues, accounts, setRevenues
                   DESCRIÇÃO POR TELA
                 </th>
                 {months.map(m => (
-                  <th key={m} colSpan={2} className="px-4 py-3 text-center text-[11px] font-black uppercase tracking-widest border-r border-slate-700/80">
+                  <th
+                    key={m}
+                    colSpan={2}
+                    className={`px-4 py-3 text-center text-[11px] font-black uppercase tracking-widest border-r border-slate-700/80 cursor-pointer ${months[selectedMonthIndex] === m ? 'bg-slate-800' : ''}`}
+                    onClick={() => setSelectedMonthIndex(months.indexOf(m))}
+                    title="Selecionar mes para os indicadores"
+                  >
                     {m}
                   </th>
                 ))}
@@ -443,6 +457,17 @@ export const DRE: React.FC<DREProps> = ({ bills, revenues, accounts, setRevenues
                 ))}
               </tr>
 
+              {/* JUROS E MULTAS */}
+              <tr className="group">
+                <td className="px-6 py-4 text-xs font-bold text-slate-600 sticky left-0 z-10 bg-white uppercase">(-) JUROS E MULTAS</td>
+                {dreData.map((d, i) => (
+                  <React.Fragment key={i}>
+                    <td className="px-4 py-4 text-center text-xs text-slate-700 cursor-pointer hover:bg-slate-50 transition-colors" onClick={() => d.interest !== 0 && handleCellClick(i, 'INTEREST', d.interest)}>{fmt(d.interest)}</td>
+                    <td className="px-4 py-4 text-center text-xs text-amber-900 bg-amber-50">{fmt(d.estInterest)}</td>
+                  </React.Fragment>
+                ))}
+              </tr>
+
               {/* PRO LABORE */}
               <tr className="group">
                 <td className="px-6 py-4 text-xs font-bold text-slate-600 sticky left-0 z-10 bg-white uppercase">(-) ABA: PRO-LABORE</td>
@@ -477,16 +502,22 @@ export const DRE: React.FC<DREProps> = ({ bills, revenues, accounts, setRevenues
         <div className="bg-white p-8 rounded-[2rem] border-2 border-slate-100 shadow-lg">
           <p className="text-xs font-black text-slate-400 uppercase tracking-[0.2em] mb-2">Ponto de Equilíbrio</p>
           <h4 className="text-3xl font-black text-indigo-600">
-             {fmt(dreData.reduce((acc, d) => acc + d.fixedExpenses + d.fixedSalary + d.proLabore, 0) / 12)}
+             {fmt((dreData[selectedMonthIndex]?.fixedExpenses || 0) + (dreData[selectedMonthIndex]?.fixedSalary || 0) + (dreData[selectedMonthIndex]?.proLabore || 0))}
           </h4>
-          <p className="text-xs text-slate-400 font-bold uppercase mt-2">Média mensal de custos fixos essenciais</p>
+          <p className="text-xs text-slate-500 font-bold uppercase mt-2">{months[selectedMonthIndex]} (mes selecionado)</p>
+          <p className="text-xs text-slate-400 font-bold uppercase mt-3">Ano: {fmt(dreData.reduce((acc, d) => acc + d.fixedExpenses + d.fixedSalary + d.proLabore, 0) / 12)}</p>
         </div>
         <div className="bg-white p-8 rounded-[2rem] border-2 border-slate-100 shadow-lg">
           <p className="text-xs font-black text-slate-400 uppercase tracking-[0.2em] mb-2">Margem de Contribuição</p>
           <h4 className="text-3xl font-black text-emerald-600">
-             {((dreData.reduce((acc, d) => acc + d.grossProfit, 0) / dreData.reduce((acc, d) => acc + d.revenue, 0)) * 100 || 0).toFixed(1)}%
+             {(() => {
+               const monthRevenue = dreData[selectedMonthIndex]?.revenue || 0;
+               const monthGross = dreData[selectedMonthIndex]?.grossProfit || 0;
+               return ((monthGross / monthRevenue) * 100 || 0).toFixed(1);
+             })()}%
           </h4>
-          <p className="text-xs text-slate-400 font-bold uppercase mt-2">Eficiência após custos de produtos</p>
+          <p className="text-xs text-slate-500 font-bold uppercase mt-2">{months[selectedMonthIndex]} (mes selecionado)</p>
+          <p className="text-xs text-slate-400 font-bold uppercase mt-3">Ano: {((dreData.reduce((acc, d) => acc + d.grossProfit, 0) / dreData.reduce((acc, d) => acc + d.revenue, 0)) * 100 || 0).toFixed(1)}%</p>
         </div>
       </div>
 
@@ -506,7 +537,8 @@ export const DRE: React.FC<DREProps> = ({ bills, revenues, accounts, setRevenues
                    showDetails.category === 'FIXED_SALARY' ? 'Salários Fixos' :
                    showDetails.category === 'FIXED_EXPENSES' ? 'Despesas Fixas' :
                    showDetails.category === 'VARIABLE_EXPENSES' ? 'Despesas Variáveis' :
-                   showDetails.category === 'PRO_LABORE' ? 'Pro-Labore' : ''}
+                   showDetails.category === 'PRO_LABORE' ? 'Pro-Labore' :
+                   showDetails.category === 'INTEREST' ? 'Juros e Multas' : ''}
                   {showDetails.isEstimate ? ' (Estimado)' : ''}
                 </p>
               </div>
@@ -536,7 +568,26 @@ export const DRE: React.FC<DREProps> = ({ bills, revenues, accounts, setRevenues
                           <p className="font-bold text-slate-800 text-sm">{bill.description}</p>
                           <p className="text-xs text-slate-500 mt-1">{bill.accountName}</p>
                         </div>
-                        <p className="font-black text-slate-800 text-lg">{fmt(bill.amount)}</p>
+                        <div className="text-right">
+                          {showDetails.category === 'INTEREST' ? (
+                            // Quando for juros, mostra o valor do juros em destaque
+                            <>
+                              <p className={`font-black text-lg ${bill.interestAmount && bill.interestAmount > 0 ? 'text-rose-600' : 'text-emerald-600'}`}>
+                                {bill.interestAmount && bill.interestAmount > 0 ? '+' : ''}{fmt(bill.interestAmount || 0)}
+                              </p>
+                              <p className="text-xs text-slate-400 mt-1">Valor original: {fmt(bill.amount)}</p>
+                              <p className="text-xs text-slate-500">Pago: {fmt(bill.paidAmount || bill.amount)}</p>
+                            </>
+                          ) : (
+                            // Para outras categorias, mostra o valor normal
+                            <>
+                              <p className="font-black text-slate-800 text-lg">{fmt(bill.amount)}</p>
+                              {bill.paidAmount && bill.paidAmount !== bill.amount && (
+                                <p className="text-xs text-slate-500 mt-1">Pago: {fmt(bill.paidAmount)}</p>
+                              )}
+                            </>
+                          )}
+                        </div>
                       </div>
                       <div className="flex items-center gap-4 text-xs mt-3 pt-3 border-t border-slate-200">
                         <div>
@@ -547,6 +598,14 @@ export const DRE: React.FC<DREProps> = ({ bills, revenues, accounts, setRevenues
                           <p className="text-slate-400 font-bold uppercase">Pagamento</p>
                           <p className="text-slate-700 font-semibold">{bill.paidDate ? formatDatePtBR(bill.paidDate) : '—'}</p>
                         </div>
+                        {showDetails.category !== 'INTEREST' && bill.interestAmount && bill.interestAmount !== 0 && (
+                          <div>
+                            <p className="text-slate-400 font-bold uppercase">Juros/Multa</p>
+                            <p className={`font-bold ${bill.interestAmount > 0 ? 'text-rose-600' : 'text-emerald-600'}`}>
+                              {bill.interestAmount > 0 ? '+' : ''}{fmt(bill.interestAmount)}
+                            </p>
+                          </div>
+                        )}
                         <div className="ml-auto">
                           <p className="text-slate-400 font-bold uppercase">Status</p>
                           <p className={`text-xs font-black uppercase px-2 py-1 rounded ${bill.status === 'Pago' ? 'bg-emerald-100 text-emerald-700' : bill.status === 'Atrasado' ? 'bg-rose-100 text-rose-700' : 'bg-amber-100 text-amber-700'}`}>
