@@ -4,6 +4,7 @@ import { Bill, Supplier, BillStatus, UserRole, ChartOfAccount } from './types';
 import { Search, Plus, FileDown, Edit2, Trash2, Repeat, Calendar, ListTree, User, AlertCircle } from 'lucide-react';
 import { jsPDF } from 'jspdf';
 import 'jspdf-autotable';
+import { theme } from './theme';
 
 interface BillListProps {
   bills: Bill[];
@@ -26,7 +27,6 @@ export const BillList: React.FC<BillListProps> = ({ bills, suppliers, accounts, 
   const [endDate, setEndDate] = useState('');
   const [showPdfPreview, setShowPdfPreview] = useState(false);
   const [pdfPreviewUrl, setPdfPreviewUrl] = useState('');
-  const [romaneioWeekFilter, setRomaneioWeekFilter] = useState(''); // Sábado da semana para filtrar romaneio
   const [sortBy, setSortBy] = useState<'dueDate' | 'paidDate' | 'amount' | 'supplier'>('dueDate'); // Ordenação
 
   // Funções auxiliares para parsing de datas (sem timezone issues)
@@ -44,36 +44,6 @@ export const BillList: React.FC<BillListProps> = ({ bills, suppliers, accounts, 
     return { year, month, day };
   };
 
-  // Funções auxiliares para semanas (sábado a sexta)
-  const getLastSaturday = (date: Date): Date => {
-    const d = new Date(date);
-    const day = d.getDay();
-    const diff = day === 6 ? 0 : (day === 0 ? 1 : day + 1); // Se sábado, diff=0, senão vai para sábado anterior
-    const lastSat = new Date(d.setDate(d.getDate() - diff));
-    return lastSat;
-  };
-
-  const getWeekSaturday = (dateStr: string): string | null => {
-    const date = new Date(dateStr);
-    const sat = getLastSaturday(date);
-    return sat.toISOString().split('T')[0]; // Retorna YYYY-MM-DD
-  };
-
-  const getAvailableWeeks = (): Array<{ satDate: string; label: string }> => {
-    const weeks: Array<{ satDate: string; label: string }> = [];
-    const today = new Date();
-    const currentSat = getLastSaturday(today);
-    
-    for (let i = -2; i <= 4; i++) {
-      const weekSat = new Date(currentSat);
-      weekSat.setDate(weekSat.getDate() + i * 7);
-      const satStr = weekSat.toISOString().split('T')[0];
-      const friStr = new Date(weekSat.getTime() + 6 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
-      const label = `${weekSat.toLocaleDateString('pt-BR', { month: 'short', day: 'numeric' })} - ${new Date(weekSat.getTime() + 6 * 24 * 60 * 60 * 1000).toLocaleDateString('pt-BR', { month: 'short', day: 'numeric' })}`;
-      weeks.push({ satDate: satStr, label });
-    }
-    return weeks;
-  };
 
   // Helper functions to detect overdue status dynamically
   const toDate = (dateStr: string) => new Date(`${dateStr}T12:00:00`);
@@ -97,6 +67,7 @@ export const BillList: React.FC<BillListProps> = ({ bills, suppliers, accounts, 
       const matchesStatus =
         statusFilter === 'ALL' ||
         (statusFilter === 'OPEN' && bill.status !== BillStatus.PAID) ||
+        (statusFilter === 'OPEN_NOT_OVERDUE' && bill.status === BillStatus.PENDING && !isOverdue(bill)) ||
         (statusFilter === BillStatus.OVERDUE && isOverdue(bill)) ||
         bill.status === statusFilter;
       const matchesSupplier = supplierFilter === 'ALL' || bill.supplierId === supplierFilter;
@@ -242,42 +213,36 @@ export const BillList: React.FC<BillListProps> = ({ bills, suppliers, accounts, 
     onEdit({ ...bill, paidAmount: paidAmount || undefined, interestAmount });
   };
 
-  const handleRomaneioWeekChange = (billId: string, weekSatDate: string | null) => {
-    const bill = bills.find(b => b.id === billId);
-    if (!bill) return;
-    
-    onEdit({ ...bill, romaneioWeek: weekSatDate || undefined });
-  };
 
   return (
     <div className="space-y-6">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <h1 className="text-4xl font-black text-slate-800">Contas a Pagar</h1>
+          <h1 className="text-4xl font-black" style={{ color: theme.colors.neutral.black }}>Contas a Pagar</h1>
           <p className="text-slate-600 font-semibold text-sm">Lista padrão mostra apenas contas pendentes e atrasadas.</p>
         </div>
         <div className="flex gap-2">
-          <button onClick={previewPDF} className="flex items-center gap-2 px-4 py-2 border border-slate-200 rounded-xl bg-white text-slate-700 hover:bg-slate-50 transition-colors font-medium text-sm shadow-sm">
+          <button onClick={previewPDF} className="flex items-center gap-2 px-4 py-2 border border-slate-200 rounded-xl bg-white text-slate-700 hover:bg-slate-50 hover:shadow-md transition-all font-medium text-sm shadow-sm">
             <FileDown size={18} /> Visualizar PDF
           </button>
-          <button onClick={exportPDF} className="flex items-center gap-2 px-4 py-2 border border-slate-200 rounded-xl bg-white text-slate-700 hover:bg-slate-50 transition-colors font-medium text-sm shadow-sm">
+          <button onClick={exportPDF} className="flex items-center gap-2 px-4 py-2 border border-slate-200 rounded-xl bg-white text-slate-700 hover:bg-slate-50 hover:shadow-md transition-all font-medium text-sm shadow-sm">
             <FileDown size={18} /> Exportar PDF
           </button>
           {canEdit && (
-            <button onClick={onOpenForm} className="flex items-center gap-2 px-4 py-2 bg-indigo-600 rounded-xl text-white hover:bg-indigo-700 transition-colors font-medium text-sm shadow-md">
+            <button onClick={onOpenForm} className="flex items-center gap-2 px-4 py-2 rounded-xl text-white hover:shadow-lg hover:-translate-y-0.5 transition-all font-medium text-sm shadow-md" style={{ backgroundColor: theme.colors.primary.purple }}>
               <Plus size={18} /> Nova Conta
             </button>
           )}
         </div>
       </div>
 
-      <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-4">
+      <div className="bg-white p-4 rounded-[20px] border border-slate-100 shadow-[0_10px_15px_-3px_rgba(0,0,0,0.04)] grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-4">
         <div className="relative md:col-span-1">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
           <input 
             type="text" 
             placeholder="Buscar..." 
-            className="w-full pl-10 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none text-sm" 
+            className="w-full pl-10 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl outline-none text-sm transition-all" 
             value={searchTerm} 
             onChange={(e) => setSearchTerm(e.target.value)} 
           />
@@ -285,21 +250,22 @@ export const BillList: React.FC<BillListProps> = ({ bills, suppliers, accounts, 
 
         <div className="relative">
           <select 
-            className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2 focus:ring-2 focus:ring-indigo-500 outline-none text-sm appearance-none" 
+            className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2 outline-none text-sm appearance-none" 
             value={statusFilter} 
             onChange={(e) => setStatusFilter(e.target.value)}
           >
+            <option value="OPEN_NOT_OVERDUE">A Pagar (Somente não vencidas)</option>
             <option value="OPEN">A Pagar (Pendentes + Atrasadas)</option>
-            <option value="ALL">Todos Status</option>
             <option value={BillStatus.PENDING}>Pendente</option>
-            <option value={BillStatus.PAID}>Pago</option>
             <option value={BillStatus.OVERDUE}>Atrasado</option>
+            <option value={BillStatus.PAID}>Pago</option>
+            <option value="ALL">Todos os Status</option>
           </select>
         </div>
 
         <div className="relative">
           <select 
-            className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2 focus:ring-2 focus:ring-indigo-500 outline-none text-sm appearance-none" 
+            className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2 outline-none text-sm appearance-none" 
             value={supplierFilter} 
             onChange={(e) => setSupplierFilter(e.target.value)}
           >
@@ -314,7 +280,7 @@ export const BillList: React.FC<BillListProps> = ({ bills, suppliers, accounts, 
           <Calendar size={16} className="text-slate-400 shrink-0" />
           <input 
             type="date" 
-            className="w-full bg-slate-50 border border-slate-200 rounded-xl px-2 py-2 text-xs focus:ring-2 focus:ring-indigo-500 outline-none" 
+            className="w-full bg-slate-50 border border-slate-200 rounded-xl px-2 py-2 text-xs outline-none" 
             value={startDate} 
             onChange={(e) => setStartDate(e.target.value)} 
           />
@@ -322,7 +288,7 @@ export const BillList: React.FC<BillListProps> = ({ bills, suppliers, accounts, 
         <div className="flex items-center gap-2">
           <input 
             type="date" 
-            className="w-full bg-slate-50 border border-slate-200 rounded-xl px-2 py-2 text-xs focus:ring-2 focus:ring-indigo-500 outline-none" 
+            className="w-full bg-slate-50 border border-slate-200 rounded-xl px-2 py-2 text-xs outline-none" 
             value={endDate} 
             onChange={(e) => setEndDate(e.target.value)} 
           />
@@ -330,7 +296,7 @@ export const BillList: React.FC<BillListProps> = ({ bills, suppliers, accounts, 
 
         <div className="relative">
           <select 
-            className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2 focus:ring-2 focus:ring-indigo-500 outline-none text-sm appearance-none" 
+            className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2 outline-none text-sm appearance-none" 
             value={sortBy} 
             onChange={(e) => setSortBy(e.target.value as 'dueDate' | 'paidDate' | 'amount' | 'supplier')}
           >
@@ -341,32 +307,20 @@ export const BillList: React.FC<BillListProps> = ({ bills, suppliers, accounts, 
           </select>
         </div>
 
-        <div className="relative">
-          <select 
-            className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2 focus:ring-2 focus:ring-indigo-500 outline-none text-sm appearance-none font-bold text-indigo-700" 
-            value={romaneioWeekFilter} 
-            onChange={(e) => setRomaneioWeekFilter(e.target.value)}
-          >
-            <option value="">📋 Todas as Semanas</option>
-            {getAvailableWeeks().map(w => (
-              <option key={w.satDate} value={w.satDate}>📅 Semana {w.label}</option>
-            ))}
-          </select>
-        </div>
       </div>
 
-      <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+      <div className="bg-white rounded-[20px] border border-slate-100 shadow-[0_10px_15px_-3px_rgba(0,0,0,0.04)] overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse min-w-[1000px]">
             <thead>
-              <tr className="bg-slate-50 border-b border-slate-200">
+              <tr className="border-b border-slate-100" style={{ backgroundColor: theme.colors.neutral.bgMain }}>
                 <th className="px-6 py-4 text-sm font-semibold text-slate-500 uppercase tracking-wider">Fornecedor / Descrição</th>
                 <th className="px-6 py-4 text-sm font-semibold text-slate-500 uppercase tracking-wider text-center">Tipo</th>
                 <th className="px-6 py-4 text-sm font-semibold text-slate-500 uppercase tracking-wider">Plano de Contas</th>
                 <th className="px-6 py-4 text-sm font-semibold text-slate-500 uppercase tracking-wider">Vencimento</th>
                 <th className="px-6 py-4 text-sm font-semibold text-slate-500 uppercase tracking-wider">Data de Pagamento</th>
-                <th className="px-6 py-4 text-sm font-semibold text-slate-500 uppercase tracking-wider">Valor Pago</th>                <th className="px-6 py-4 text-sm font-semibold text-slate-500 uppercase tracking-wider">Juros</th>                <th className="px-6 py-4 text-sm font-semibold text-slate-500 uppercase tracking-wider">Juros</th>
-                <th className="px-6 py-4 text-sm font-semibold text-slate-500 uppercase tracking-wider">Romaneio</th>
+                <th className="px-6 py-4 text-sm font-semibold text-slate-500 uppercase tracking-wider">Valor Pago</th>
+                <th className="px-6 py-4 text-sm font-semibold text-slate-500 uppercase tracking-wider">Juros</th>
                 <th className="px-6 py-4 text-sm font-semibold text-slate-500 uppercase tracking-wider">Valor</th>
                 <th className="px-6 py-4 text-sm font-semibold text-slate-500 uppercase tracking-wider text-right">Ações</th>
               </tr>
@@ -376,14 +330,14 @@ export const BillList: React.FC<BillListProps> = ({ bills, suppliers, accounts, 
                 const supplier = suppliers.find(s => s.id === bill.supplierId);
                 const account = accounts.find(a => a.id === bill.accountId);
                 return (
-                  <tr key={bill.id} className="hover:bg-slate-50 transition-colors group">
+                  <tr key={bill.id} className="hover:bg-slate-50 transition-all group">
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-3">
-                        {bill.recurrenceType !== 'none' && <div className="bg-indigo-100 p-1.5 rounded-lg text-indigo-600"><Repeat size={14} /></div>}
+                        {bill.recurrenceType !== 'none' && <div className="p-1.5 rounded-lg" style={{ backgroundColor: '#EDE9FE', color: theme.colors.primary.purple }}><Repeat size={14} /></div>}
                         {bill.isEstimate && <div className="bg-amber-100 px-2 py-1 rounded text-amber-700 text-xs font-bold uppercase tracking-tight">Estimativa</div>}
                         <div>
-                          <p className="font-semibold text-slate-800 text-sm">
-                            {supplier?.name || 'Fornecedor Desconhecido'}
+                          <p className="font-semibold text-sm" style={{ color: theme.colors.neutral.black }}>
+                            {(supplier?.name || 'Fornecedor Desconhecido').toUpperCase()}
                           </p>
                           <p className="text-sm text-slate-500 flex items-center gap-1">
                             {bill.description}
@@ -393,12 +347,19 @@ export const BillList: React.FC<BillListProps> = ({ bills, suppliers, accounts, 
                       </div>
                     </td>
                     <td className="px-6 py-4 text-center">
-                      <span className={`px-2 py-0.5 rounded text-xs font-black uppercase ${account?.type === 'VARIABLE' ? 'bg-orange-100 text-orange-600' : 'bg-indigo-100 text-indigo-600'}`} title={account?.type === 'VARIABLE' ? 'Despesa Variável' : 'Despesa Fixa'}>
+                      <span 
+                        className="px-2 py-0.5 rounded text-xs font-black uppercase" 
+                        style={{ 
+                          backgroundColor: account?.type === 'VARIABLE' ? '#DBEAFE' : '#EDE9FE',
+                          color: account?.type === 'VARIABLE' ? theme.colors.accent.blue : theme.colors.primary.purple
+                        }}
+                        title={account?.type === 'VARIABLE' ? 'Despesa Variável' : 'Despesa Fixa'}
+                      >
                         {account?.type === 'VARIABLE' ? 'V' : 'F'}
                       </span>
                     </td>
                     <td className="px-6 py-4">
-                      <div className="flex items-center gap-2 text-xs text-indigo-700 bg-indigo-50 px-3 py-1 rounded-full w-fit font-bold uppercase tracking-tighter">
+                      <div className="flex items-center gap-2 text-xs px-3 py-1 rounded-full w-fit font-bold uppercase tracking-tighter" style={{ backgroundColor: '#EDE9FE', color: theme.colors.primary.purple }}>
                         <ListTree size={12} />
                         {account?.name || 'N/A'}
                       </div>
@@ -453,25 +414,7 @@ export const BillList: React.FC<BillListProps> = ({ bills, suppliers, accounts, 
                       )}
                     </td>
                     <td className="px-6 py-4">
-                      {canEdit ? (
-                        <select
-                          value={bill.romaneioWeek || ''}
-                          onChange={(e) => handleRomaneioWeekChange(bill.id, e.target.value || null)}
-                          className="w-full px-2 py-1 text-xs border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none bg-white hover:border-slate-300 transition-colors font-semibold"
-                        >
-                          <option value="">—</option>
-                          {getAvailableWeeks().map(w => (
-                            <option key={w.satDate} value={w.satDate}>{w.label}</option>
-                          ))}
-                        </select>
-                      ) : (
-                        <span className="text-xs text-slate-600 font-semibold">
-                          {bill.romaneioWeek ? getAvailableWeeks().find(w => w.satDate === bill.romaneioWeek)?.label || '—' : '—'}
-                        </span>
-                      )}
-                    </td>
-                    <td className="px-6 py-4">
-                      <span className="font-semibold text-slate-800 text-sm">
+                      <span className="font-semibold text-sm" style={{ color: theme.colors.neutral.black }}>
                         {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(bill.amount)}
                       </span>
                     </td>
@@ -487,7 +430,7 @@ export const BillList: React.FC<BillListProps> = ({ bills, suppliers, accounts, 
                           </button>
                         )}
                         {canEdit && (
-                          <button onClick={() => onEdit(bill)} className="p-2 text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors" title="Editar">
+                          <button onClick={() => onEdit(bill)} className="p-2 hover:bg-purple-50 rounded-lg transition-colors" style={{ color: theme.colors.primary.purple }} title="Editar">
                             <Edit2 size={18} />
                           </button>
                         )}
@@ -513,17 +456,17 @@ export const BillList: React.FC<BillListProps> = ({ bills, suppliers, accounts, 
 
       {showPdfPreview && (
         <div className="fixed inset-0 z-50 bg-slate-900/60 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-5xl h-[85vh] overflow-hidden flex flex-col">
-            <div className="flex items-center justify-between px-5 py-4 border-b border-slate-200 bg-slate-50">
+          <div className="bg-white rounded-[20px] shadow-[0_20px_25px_-5px_rgba(0,0,0,0.1)] w-full max-w-5xl h-[85vh] overflow-hidden flex flex-col">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100" style={{ backgroundColor: theme.colors.neutral.bgMain }}>
               <div>
-                <h3 className="text-lg font-black text-slate-800">Pré-visualização do Relatório</h3>
+                <h3 className="text-lg font-black" style={{ color: theme.colors.neutral.black }}>Pré-visualização do Relatório</h3>
                 <p className="text-xs text-slate-500 font-bold uppercase tracking-wider">Contas a Pagar</p>
               </div>
               <div className="flex items-center gap-2">
-                <button onClick={exportPDF} className="px-4 py-2 bg-indigo-600 text-white rounded-lg font-bold hover:bg-indigo-700 transition-colors">
+                <button onClick={exportPDF} className="px-4 py-2 text-white rounded-lg font-bold hover:shadow-lg transition-all" style={{ backgroundColor: theme.colors.primary.purple }}>
                   Exportar PDF
                 </button>
-                <button onClick={() => setShowPdfPreview(false)} className="px-4 py-2 border border-slate-200 rounded-lg font-bold text-slate-600 hover:bg-slate-50">
+                <button onClick={() => setShowPdfPreview(false)} className="px-4 py-2 border border-slate-200 rounded-lg font-bold text-slate-600 hover:bg-slate-50 transition-colors">
                   Fechar
                 </button>
               </div>
