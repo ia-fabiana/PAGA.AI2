@@ -27,6 +27,7 @@ export const BillList: React.FC<BillListProps> = ({ bills, suppliers, accounts, 
   const [showPdfPreview, setShowPdfPreview] = useState(false);
   const [pdfPreviewUrl, setPdfPreviewUrl] = useState('');
   const [romaneioWeekFilter, setRomaneioWeekFilter] = useState(''); // Sábado da semana para filtrar romaneio
+  const [sortBy, setSortBy] = useState<'dueDate' | 'paidDate' | 'amount' | 'supplier'>('dueDate'); // Ordenação
 
   // Funções auxiliares para parsing de datas (sem timezone issues)
   const formatDatePtBR = (dateStr: string): string => {
@@ -84,7 +85,7 @@ export const BillList: React.FC<BillListProps> = ({ bills, suppliers, accounts, 
   };
 
   const filteredBills = useMemo(() => {
-    return bills.filter(bill => {
+    const filtered = bills.filter(bill => {
       const supplier = suppliers.find(s => s.id === bill.supplierId);
       const account = accounts.find(a => a.id === bill.accountId);
       
@@ -106,8 +107,29 @@ export const BillList: React.FC<BillListProps> = ({ bills, suppliers, accounts, 
         (!endDate || billDate <= new Date(endDate));
 
       return matchesSearch && matchesStatus && matchesSupplier && matchesDate;
-    }).sort((a, b) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime());
-  }, [bills, suppliers, accounts, searchTerm, statusFilter, supplierFilter, startDate, endDate]);
+    });
+
+    // Aplicar ordenação conforme selecionado
+    return filtered.sort((a, b) => {
+      switch (sortBy) {
+        case 'dueDate':
+          return new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime();
+        case 'paidDate':
+          const aPaidDate = a.paidDate ? new Date(a.paidDate).getTime() : Infinity;
+          const bPaidDate = b.paidDate ? new Date(b.paidDate).getTime() : Infinity;
+          return aPaidDate - bPaidDate;
+        case 'amount':
+          return b.amount - a.amount; // Maior valor primeiro
+        case 'supplier': {
+          const aSupplier = suppliers.find(s => s.id === a.supplierId)?.name || '';
+          const bSupplier = suppliers.find(s => s.id === b.supplierId)?.name || '';
+          return aSupplier.localeCompare(bSupplier);
+        }
+        default:
+          return 0;
+      }
+    });
+  }, [bills, suppliers, accounts, searchTerm, statusFilter, supplierFilter, startDate, endDate, sortBy]);
 
   const canEdit = userRole !== UserRole.VIEWER;
   const canDelete = userRole !== UserRole.VIEWER; // Qualquer usuário logado pode excluir, exceto VIEWER
@@ -304,6 +326,19 @@ export const BillList: React.FC<BillListProps> = ({ bills, suppliers, accounts, 
             value={endDate} 
             onChange={(e) => setEndDate(e.target.value)} 
           />
+        </div>
+
+        <div className="relative">
+          <select 
+            className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2 focus:ring-2 focus:ring-indigo-500 outline-none text-sm appearance-none" 
+            value={sortBy} 
+            onChange={(e) => setSortBy(e.target.value as 'dueDate' | 'paidDate' | 'amount' | 'supplier')}
+          >
+            <option value="dueDate">📅 Ordenar por Vencimento</option>
+            <option value="paidDate">💳 Ordenar por Data de Pagamento</option>
+            <option value="amount">💰 Ordenar por Valor</option>
+            <option value="supplier">🏢 Ordenar por Fornecedor</option>
+          </select>
         </div>
 
         <div className="relative">
