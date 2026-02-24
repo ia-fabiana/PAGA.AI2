@@ -1,9 +1,11 @@
 
-import React, { useMemo, useState } from 'react';
-import { Bill, Revenue, ChartOfAccount, DreCategory, BillStatus } from './types';
+import React, { useMemo, useState, useEffect } from 'react';
+import { Bill, Revenue, ChartOfAccount, DreCategory, BillStatus, CashBoxData } from './types';
 import { TrendingUp, FileDown, AlertCircle, X } from 'lucide-react';
 import { jsPDF } from 'jspdf';
 import 'jspdf-autotable';
+import { db } from './firebase';
+import { collection, getDocs, query, orderBy } from 'firebase/firestore';
 
 interface DREProps {
   bills: Bill[];
@@ -17,6 +19,7 @@ interface DetailModal {
   category: DreCategory | 'REVENUE' | 'GROSS_PROFIT' | 'NET_PROFIT' | 'INTEREST';
   bills: (Bill & { accountName: string })[];
   revenues: Revenue[];
+  cashBoxEntries: CashBoxData[];
   total: number;
   isEstimate?: boolean;
 }
@@ -26,7 +29,23 @@ export const DRE: React.FC<DREProps> = ({ bills, revenues, accounts, setRevenues
   const [estimateRevenueInputs, setEstimateRevenueInputs] = useState<Record<number, string>>({});
   const [realRevenueInputs, setRealRevenueInputs] = useState<Record<number, string>>({});
   const [selectedMonthIndex, setSelectedMonthIndex] = useState(new Date().getMonth());
+  const [cashBoxEntries, setCashBoxEntries] = useState<CashBoxData[]>([]);
   const currentYear = 2026;
+
+  // Load cashbox data from Firebase
+  useEffect(() => {
+    const loadCashBoxData = async () => {
+      try {
+        const q = query(collection(db, 'cashbox'), orderBy('date', 'asc'));
+        const snapshot = await getDocs(q);
+        const entries = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id } as CashBoxData));
+        setCashBoxEntries(entries);
+      } catch (err) {
+        console.error('Erro ao carregar dados do caixa:', err);
+      }
+    };
+    loadCashBoxData();
+  }, []);
 
   const months = ['JANEIRO', 'FEVEREIRO', 'MARÇO', 'ABRIL', 'MAIO', 'JUNHO', 'JULHO', 'AGOSTO', 'SETEMBRO', 'OUTUBRO', 'NOVEMBRO', 'DEZEMBRO'];
 
@@ -102,12 +121,16 @@ export const DRE: React.FC<DREProps> = ({ bills, revenues, accounts, setRevenues
 
   const dreData = useMemo(() => {
     return months.map((_, index) => {
-      // Somar todas as receitas do mês
-      const monthRevenue = revenues
-        .filter(r => {
-          return getMonthIndex(r.date) === index && getYearValue(r.date) === currentYear && !r.isEstimate;
+      // Somar receitas do caixa do mês (APENAS O CAIXA ENTRA NO DRE)
+      const cashBoxRevenue = cashBoxEntries
+        .filter(entry => {
+          const [year, month] = entry.date.split('-');
+          return parseInt(year) === currentYear && parseInt(month) === index + 1;
         })
-        .reduce((sum, r) => sum + r.amount, 0);
+        .reduce((sum, entry) => sum + entry.grandTotal, 0);
+      
+      // Total de receita REAL = APENAS CAIXA (receitas manuais são só para validação interna)
+      const totalRealRevenue = cashBoxRevenue;
 
       const monthEstimateRevenue = revenues
         .filter(r => {
@@ -153,7 +176,7 @@ export const DRE: React.FC<DREProps> = ({ bills, revenues, accounts, setRevenues
       const estProLabore = getEstimateSum('PRO_LABORE');
       const estInterest = 0; // Não há estimativa de juros
 
-      const grossProfit = monthRevenue - products;
+      const grossProfit = totalRealRevenue - products;
       const totalExpenses = commissions + fixedSalary + fixedExpenses + variableExpenses + proLabore + interest;
       const netProfit = grossProfit - totalExpenses;
 
@@ -162,7 +185,7 @@ export const DRE: React.FC<DREProps> = ({ bills, revenues, accounts, setRevenues
       const estNetProfit = estGrossProfit - estTotalExpenses;
 
       return {
-        revenue: monthRevenue,
+        revenue: totalRealRevenue,
         estRevenue: monthEstimateRevenue,
         products,
         grossProfit,
@@ -184,7 +207,7 @@ export const DRE: React.FC<DREProps> = ({ bills, revenues, accounts, setRevenues
         estNetProfit
       };
     });
-  }, [bills, revenues, accounts, currentYear]);
+  }, [bills, revenues, accounts, currentYear, cashBoxEntries]);
 
   const getEstimateRevenueForMonth = (monthIndex: number) => {
     return revenues
@@ -196,12 +219,15 @@ export const DRE: React.FC<DREProps> = ({ bills, revenues, accounts, setRevenues
   };
 
   const getRealRevenueForMonth = (monthIndex: number) => {
-    return revenues
-      .filter(r => !r.isEstimate)
-      .filter(r => {
-        return getMonthIndex(r.date) === monthIndex && getYearValue(r.date) === currentYear;
+    // Retorna APENAS receitas do caixa (receitas manuais não entram no DRE)
+    const cashBoxRevenue = cashBoxEntries
+      .filter(entry => {
+        const [year, month] = entry.date.split('-');
+        return parseInt(year) === currentYear && parseInt(month) === monthIndex + 1;
       })
-      .reduce((sum, r) => sum + r.amount, 0);
+      .reduce((sum, entry) => sum + entry.grandTotal, 0);
+    
+    return cashBoxRevenue;
   };
 
   const parseCurrencyInput = (value: string) => {
@@ -281,11 +307,19 @@ export const DRE: React.FC<DREProps> = ({ bills, revenues, accounts, setRevenues
   const handleCellClick = (monthIndex: number, category: DreCategory | 'REVENUE' | 'GROSS_PROFIT' | 'NET_PROFIT' | 'INTEREST', value: number, isEstimate = false) => {
     if (value === 0) return;
     const { bills: detailBills, revenues: detailRevenues } = getMonthDetails(monthIndex, category, isEstimate);
+    
+    // Filtrar entradas do cashbox do mês
+    const monthCashBoxEntries = cashBoxEntries.filter(entry => {
+      const [year, month] = entry.date.split('-');
+      return parseInt(year) === currentYear && parseInt(month) === monthIndex + 1;
+    });
+    
     setShowDetails({
       month: monthIndex,
       category,
       bills: detailBills,
       revenues: detailRevenues,
+      cashBoxEntries: monthCashBoxEntries,
       total: value,
       isEstimate
     });
@@ -300,7 +334,7 @@ export const DRE: React.FC<DREProps> = ({ bills, revenues, accounts, setRevenues
         </div>
         <div className="hidden md:flex items-center gap-3">
           <span className="px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest bg-amber-200 text-amber-900">Real</span>
-          <span className="px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest bg-slate-900 text-white">Estimado</span>
+          <span className="px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest bg-slate-900 text-white">Projeção</span>
         </div>
       </div>
 
@@ -331,38 +365,55 @@ export const DRE: React.FC<DREProps> = ({ bills, revenues, accounts, setRevenues
                 {months.map(m => (
                   <React.Fragment key={`${m}-sub`}>
                     <th className="px-3 py-2 text-center text-[10px] font-black uppercase border-r border-slate-700/80 bg-amber-200 text-amber-900">Real</th>
-                    <th className="px-3 py-2 text-center text-[10px] font-black uppercase border-r border-slate-700/80">Estimado</th>
+                    <th className="px-3 py-2 text-center text-[10px] font-black uppercase border-r border-slate-700/80">Projeção</th>
                   </React.Fragment>
                 ))}
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-200">
               {/* RECEITA */}
-              <tr className="bg-emerald-700 text-white font-black">
+              <tr className="bg-emerald-700 text-white font-black cursor-pointer hover:bg-emerald-600 transition-colors">
                 <td className="px-6 py-4 text-sm sticky left-0 z-20 bg-emerald-700 uppercase">RECEITA BRUTA (FATURAMENTO)</td>
                 {dreData.map((d, i) => (
                   <React.Fragment key={i}>
-                    <td className="px-3 py-3 text-center text-sm font-black bg-emerald-500 text-white">
-                      <input
-                        type="text"
-                        inputMode="decimal"
-                        value={realRevenueInputs[i] ?? formatCurrencyInput(getRealRevenueForMonth(i))}
-                        onChange={(e) => setRealRevenueInputs(prev => ({ ...prev, [i]: e.target.value }))}
-                        onBlur={(e) => {
-                          const amount = parseCurrencyInput(e.target.value);
-                          upsertRealRevenue(i, amount);
-                          setRealRevenueInputs(prev => ({ ...prev, [i]: amount > 0 ? formatCurrencyInput(amount) : '' }));
-                        }}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter') {
-                            (e.target as HTMLInputElement).blur();
-                          }
-                        }}
-                        placeholder="0,00"
-                        className="w-24 text-center text-sm font-black text-white bg-transparent border-b border-emerald-300 focus:outline-none focus:border-white"
-                      />
+                    <td 
+                      className="px-3 py-3 text-center text-sm font-black bg-emerald-500 text-white cursor-pointer hover:bg-emerald-400 transition-colors"
+                      onClick={() => {
+                        const realRevenue = getRealRevenueForMonth(i);
+                        const monthCashBoxEntries = cashBoxEntries.filter(entry => {
+                          const [year, month] = entry.date.split('-');
+                          return parseInt(year) === currentYear && parseInt(month) === i + 1;
+                        });
+                        setShowDetails({
+                          month: i,
+                          category: 'REVENUE',
+                          bills: [],
+                          revenues: [],
+                          cashBoxEntries: monthCashBoxEntries,
+                          total: realRevenue,
+                          isEstimate: false
+                        });
+                      }}
+                      title={`💰 Receita do Caixa: ${fmt(getRealRevenueForMonth(i))}\n\n✏️ Clique para ver detalhes dos recebimentos`}
+                    >
+                      {fmt(getRealRevenueForMonth(i))}
                     </td>
-                    <td className="px-3 py-3 text-center text-xs font-bold bg-emerald-100 text-emerald-900">
+                    <td 
+                      className="px-3 py-3 text-center text-xs font-bold bg-emerald-100 text-emerald-900 cursor-pointer hover:bg-emerald-50 transition-colors"
+                      onClick={() => {
+                        const estimateRevenue = getEstimateRevenueForMonth(i);
+                        const revenues_estimate = revenues.filter(r => r.isEstimate && getMonthIndex(r.date) === i && getYearValue(r.date) === currentYear);
+                        setShowDetails({
+                          month: i,
+                          category: 'REVENUE',
+                          bills: [],
+                          revenues: revenues_estimate,
+                          cashBoxEntries: [], // Projeção não tem entradas do caixa
+                          total: estimateRevenue,
+                          isEstimate: true
+                        });
+                      }}
+                    >
                       <input
                         type="text"
                         inputMode="decimal"
@@ -378,6 +429,7 @@ export const DRE: React.FC<DREProps> = ({ bills, revenues, accounts, setRevenues
                             (e.target as HTMLInputElement).blur();
                           }
                         }}
+                        onClick={(e) => e.stopPropagation()}
                         placeholder="0,00"
                         className="w-24 text-center text-xs font-black text-emerald-900 bg-transparent border-b border-emerald-300 focus:outline-none focus:border-emerald-600"
                       />
@@ -401,7 +453,7 @@ export const DRE: React.FC<DREProps> = ({ bills, revenues, accounts, setRevenues
               <tr className="bg-indigo-100 font-black">
                 <td
                   className="px-6 py-4 text-sm sticky left-0 z-10 bg-indigo-100 uppercase"
-                  title="Lucro Bruto = Receita Bruta - Produtos (Real e Estimado)"
+                  title="Lucro Bruto = Receita Bruta - Produtos (Real e Projeção)"
                 >
                   LUCRO BRUTO
                 </td>
@@ -524,12 +576,12 @@ export const DRE: React.FC<DREProps> = ({ bills, revenues, accounts, setRevenues
       {/* Modal de Detalhes */}
       {showDetails && (
         <div className="fixed inset-0 bg-slate-900/50 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full max-h-[80vh] overflow-hidden flex flex-col animate-in zoom-in">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-3xl w-full max-h-[80vh] overflow-hidden flex flex-col animate-in zoom-in">
             <div className="flex items-center justify-between p-6 border-b border-slate-200 bg-slate-50">
               <div>
-                <h3 className="text-xl font-black text-slate-800">{months[showDetails.month]}</h3>
+                <h3 className="text-2xl font-black text-slate-800">{months[showDetails.month]}</h3>
                 <p className="text-sm text-slate-500 font-bold uppercase tracking-wide mt-1">
-                  {showDetails.category === 'REVENUE' ? 'Receita Bruta' :
+                  {showDetails.category === 'REVENUE' ? '📊 Receita Bruta' :
                    showDetails.category === 'GROSS_PROFIT' ? 'Lucro Bruto' :
                    showDetails.category === 'NET_PROFIT' ? 'Lucro Líquido' :
                    showDetails.category === 'PRODUCT_COST' ? 'Custo de Produtos' :
@@ -539,7 +591,7 @@ export const DRE: React.FC<DREProps> = ({ bills, revenues, accounts, setRevenues
                    showDetails.category === 'VARIABLE_EXPENSES' ? 'Despesas Variáveis' :
                    showDetails.category === 'PRO_LABORE' ? 'Pro-Labore' :
                    showDetails.category === 'INTEREST' ? 'Juros e Multas' : ''}
-                  {showDetails.isEstimate ? ' (Estimado)' : ''}
+                  {showDetails.isEstimate ? ' (Projeção)' : ' (Real)'}
                 </p>
               </div>
               <button onClick={() => setShowDetails(null)} className="p-2 hover:bg-slate-100 rounded-lg text-slate-400">
@@ -548,20 +600,75 @@ export const DRE: React.FC<DREProps> = ({ bills, revenues, accounts, setRevenues
             </div>
             
             <div className="overflow-y-auto flex-1 p-6">
-              {showDetails.bills.length === 0 && showDetails.revenues.length === 0 ? (
-                <p className="text-center text-slate-400 py-8">Nenhum lançamento nesta categoria para este mês</p>
+              {showDetails.category === 'REVENUE' ? (
+                <div>
+                  {showDetails.cashBoxEntries.length === 0 ? (
+                    <div className="text-center py-12">
+                      <p className="text-slate-400 text-lg font-semibold">Nenhuma receita registrada no caixa</p>
+                      <p className="text-slate-300 text-sm mt-2">Registre valores na tela de Caixa para que apareçam aqui</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-6">
+                      {/* Sumário */}
+                      <div className="bg-gradient-to-r from-blue-50 to-cyan-50 rounded-xl p-6 border-2 border-blue-200">
+                        <div className="grid grid-cols-2 gap-6">
+                          <div>
+                            <p className="text-sm font-bold text-slate-500 uppercase tracking-wide">💰 Receita do Caixa</p>
+                            <p className="text-3xl font-black text-blue-700 mt-2">{fmt(showDetails.total)}</p>
+                          </div>
+                          <div>
+                            <p className="text-sm font-bold text-slate-500 uppercase tracking-wide">📅 Dias com Movimento</p>
+                            <p className="text-3xl font-black text-blue-700 mt-2">
+                              {showDetails.cashBoxEntries.length}
+                            </p>
+                          </div>
+                        </div>
+                        <p className="text-xs text-slate-600 mt-4 font-semibold">💡 Faturamento consolidado dos recebimentos registrados no Caixa deste mês</p>
+                      </div>
+
+                      {/* Receitas do Caixa */}
+                      <div>
+                        <h4 className="text-sm font-black text-slate-700 uppercase tracking-wide mb-3">💰 Recebimentos por Dia</h4>
+                        <div className="space-y-2">
+                            {showDetails.cashBoxEntries.map((entry, idx) => {
+                              const [year, month, day] = entry.date.split('-');
+                              const dateFormatted = `${day}/${month}/${year}`;
+                              return (
+                                <div key={`cashbox-${idx}`} className="flex items-center justify-between p-4 bg-blue-50 rounded-lg border border-blue-200 hover:bg-blue-100 transition-colors">
+                                  <div className="flex-1">
+                                    <p className="font-bold text-blue-800 text-sm">Recebimentos do dia {dateFormatted}</p>
+                                    <p className="text-xs text-blue-600 mt-1">
+                                      📅 Caixa - Movimentação diária
+                                    </p>
+                                  </div>
+                                  <div className="text-right">
+                                    <p className="font-black text-blue-800 text-lg">{fmt(entry.grandTotal)}</p>
+                                    <p className="text-xs text-blue-600 mt-1">{((entry.grandTotal / showDetails.total) * 100).toFixed(1)}%</p>
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+
+                      {/* Info sobre receitas manuais */}
+                      {!showDetails.isEstimate && (
+                        <div className="p-4 bg-amber-50 border-2 border-amber-200 rounded-lg">
+                          <p className="text-xs text-amber-800 font-bold">
+                            ℹ️ <strong>Nota:</strong> O DRE considera apenas as receitas do Caixa. 
+                            Receitas manuais são utilizadas internamente apenas para validação (conferir se o total do ERP bate com o detalhado das formas de pagamento).
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
               ) : (
                 <div className="space-y-3">
-                  {showDetails.revenues.map((revenue, idx) => (
-                    <div key={`rev-${idx}`} className="flex items-center justify-between p-4 bg-emerald-50 rounded-lg border border-emerald-200 hover:bg-emerald-100 transition-colors">
-                      <div className="flex-1">
-                        <p className="font-bold text-emerald-800 text-sm">{revenue.description || 'Receita de ' + new Date(revenue.date).toLocaleDateString('pt-BR')}</p>
-                        <p className="text-xs text-emerald-600 mt-1">{new Date(revenue.date).toLocaleDateString('pt-BR')}</p>
-                      </div>
-                      <p className="font-black text-emerald-800">{fmt(revenue.amount)}</p>
-                    </div>
-                  ))}
-                  {showDetails.bills.map((bill, idx) => (
+                  {showDetails.bills.length === 0 ? (
+                    <p className="text-center text-slate-400 py-8">Nenhum lançamento nesta categoria para este mês</p>
+                  ) : (
+                    showDetails.bills.map((bill, idx) => (
                     <div key={`bill-${idx}`} className="p-4 bg-slate-50 rounded-lg border border-slate-200 hover:bg-slate-100 transition-colors">
                       <div className="flex items-center justify-between mb-2">
                         <div>
@@ -570,7 +677,6 @@ export const DRE: React.FC<DREProps> = ({ bills, revenues, accounts, setRevenues
                         </div>
                         <div className="text-right">
                           {showDetails.category === 'INTEREST' ? (
-                            // Quando for juros, mostra o valor do juros em destaque
                             <>
                               <p className={`font-black text-lg ${bill.interestAmount && bill.interestAmount > 0 ? 'text-rose-600' : 'text-emerald-600'}`}>
                                 {bill.interestAmount && bill.interestAmount > 0 ? '+' : ''}{fmt(bill.interestAmount || 0)}
@@ -579,7 +685,6 @@ export const DRE: React.FC<DREProps> = ({ bills, revenues, accounts, setRevenues
                               <p className="text-xs text-slate-500">Pago: {fmt(bill.paidAmount || bill.amount)}</p>
                             </>
                           ) : (
-                            // Para outras categorias, mostra o valor normal
                             <>
                               <p className="font-black text-slate-800 text-lg">{fmt(bill.amount)}</p>
                               {bill.paidAmount && bill.paidAmount !== bill.amount && (
@@ -614,14 +719,21 @@ export const DRE: React.FC<DREProps> = ({ bills, revenues, accounts, setRevenues
                         </div>
                       </div>
                     </div>
-                  ))}
+                  ))
+                  )}
                 </div>
               )}
             </div>
 
-            <div className="border-t border-slate-200 bg-slate-50 p-6 flex items-center justify-between">
-              <p className="text-sm font-bold text-slate-500 uppercase">TOTAL DESTA CATEGORIA</p>
-              <p className="text-2xl font-black text-slate-800">{fmt(showDetails.total)}</p>
+            <div className={`border-t p-6 flex items-center justify-between ${
+              showDetails.category === 'REVENUE' 
+                ? 'bg-gradient-to-r from-emerald-50 to-green-50 border-emerald-200'
+                : 'bg-slate-50 border-slate-200'
+            }`}>
+              <p className="text-sm font-bold text-slate-600 uppercase">Total desta categoria</p>
+              <p className={`text-3xl font-black ${showDetails.category === 'REVENUE' ? 'text-emerald-700' : 'text-slate-800'}`}>
+                {fmt(showDetails.total)}
+              </p>
             </div>
           </div>
         </div>

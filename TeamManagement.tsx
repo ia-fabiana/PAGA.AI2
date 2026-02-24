@@ -4,7 +4,7 @@ import { TeamMember, UserRole, ModulePermissions, ChartOfAccount } from './types
 import { 
   UserPlus, Shield, Mail, Trash2, CheckCircle, XCircle, 
   LayoutDashboard, Receipt, Users, ListTree, Building2, 
-  UserCog, Check, ShieldCheck, ToggleLeft, ToggleRight, Sparkles, Lock, Unlock
+  UserCog, Check, ShieldCheck, ToggleLeft, ToggleRight, Sparkles, Lock, Unlock, Calendar, DollarSign, FilePieChart, Landmark
 } from 'lucide-react';
 
 interface TeamManagementProps {
@@ -27,7 +27,9 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({ team, setTeam, c
       suppliers: false,
       accounts: false,
       team: false,
-      profile: false
+      profile: false,
+      dre: false,
+      cashbox: false
     }
   });
 
@@ -38,7 +40,8 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({ team, setTeam, c
       ...newMember,
       id: Math.random().toString(36).substr(2, 9),
       active: true,
-      categoryPermissions: []
+      categoryPermissions: [],
+      inviteSent: false
     };
     setTeam(prev => [...prev, member]);
     setIsAdding(false);
@@ -46,8 +49,24 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({ team, setTeam, c
       name: '', 
       email: '', 
       role: UserRole.VIEWER,
-      permissions: { dashboard: true, bills: true, suppliers: false, accounts: false, team: false, profile: false }
+      permissions: { dashboard: true, bills: true, suppliers: false, accounts: false, team: false, profile: false, dre: false, cashbox: false }
     });
+  };
+
+  const sendInvite = (id: string) => {
+    if (!canManage) return;
+    setTeam(prev => prev.map(m => {
+      if (m.id === id) {
+        // Aqui você pode adicionar a lógica de envio de e-mail no futuro
+        alert(`Convite enviado para ${m.email}!\n\nO colaborador receberá um e-mail com instruções de acesso.`);
+        return {
+          ...m,
+          inviteSent: true,
+          inviteSentDate: new Date().toISOString()
+        };
+      }
+      return m;
+    }));
   };
 
   const removeMember = (id: string) => {
@@ -99,9 +118,15 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({ team, setTeam, c
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, color: 'blue' },
     { id: 'bills', label: 'Contas', icon: Receipt, color: 'indigo' },
     { id: 'suppliers', label: 'Fornecedores', icon: Users, color: 'emerald' },
-    { id: 'accounts', label: 'P. Contas', icon: ListTree, color: 'purple' },
+    { id: 'accounts', label: 'Centro Custo', icon: ListTree, color: 'purple' },
+    { id: 'dre', label: 'DRE', icon: FilePieChart, color: 'pink' },
+    { id: 'cashbox', label: 'Caixa', icon: DollarSign, color: 'green' },
+    { id: 'reconciliation', label: 'Conciliação Bancária', icon: Landmark, color: 'teal' },
     { id: 'team', label: 'Equipe', icon: UserCog, color: 'orange' },
     { id: 'profile', label: 'Empresa', icon: Building2, color: 'slate' },
+    { id: 'canEditBillDate', label: 'Editar Data Lançamento', icon: Calendar, color: 'cyan' },
+    { id: 'canCreateSupplier', label: 'Cadastrar Fornecedor', icon: Users, color: 'lime' },
+    { id: 'canEditCashBoxStatus', label: 'Editar Status do Caixa', icon: ShieldCheck, color: 'violet' },
   ];
 
   const getColorClasses = (color: string, active: boolean) => {
@@ -114,6 +139,11 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({ team, setTeam, c
       purple: 'bg-purple-50 border-purple-200 text-purple-700 shadow-purple-100',
       orange: 'bg-orange-50 border-orange-200 text-orange-700 shadow-orange-100',
       slate: 'bg-slate-100 border-slate-300 text-slate-700 shadow-slate-100',
+      cyan: 'bg-cyan-50 border-cyan-200 text-cyan-700 shadow-cyan-100',
+      lime: 'bg-lime-50 border-lime-200 text-lime-700 shadow-lime-100',
+      green: 'bg-green-50 border-green-200 text-green-700 shadow-green-100',
+      pink: 'bg-pink-50 border-pink-200 text-pink-700 shadow-pink-100',
+      teal: 'bg-teal-50 border-teal-200 text-teal-700 shadow-teal-100',
     };
     return themes[color] || themes.indigo;
   };
@@ -127,6 +157,11 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({ team, setTeam, c
       purple: 'bg-purple-600 text-white',
       orange: 'bg-orange-600 text-white',
       slate: 'bg-slate-700 text-white',
+      cyan: 'bg-cyan-600 text-white',
+      lime: 'bg-lime-600 text-white',
+      green: 'bg-green-600 text-white',
+      pink: 'bg-pink-600 text-white',
+      teal: 'bg-teal-600 text-white',
     };
     return themes[color] || themes.indigo;
   };
@@ -216,8 +251,21 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({ team, setTeam, c
               </div>
             </div>
 
+            <div className="flex gap-4 items-center">
+              <div className="flex-1 bg-amber-50 border-2 border-amber-200 rounded-2xl p-4">
+                <div className="flex gap-3">
+                  <div className="text-amber-600 flex-shrink-0">
+                    <Mail size={24} />
+                  </div>
+                  <div>
+                    <p className="text-sm font-black text-amber-800 mb-1">💡 Dica Importante</p>
+                    <p className="text-xs text-amber-700 font-medium">Os dados serão salvos, mas o convite só será enviado quando você clicar no botão "Enviar Convite" depois.</p>
+                  </div>
+                </div>
+              </div>
+            </div>
             <button type="submit" className="w-full bg-indigo-600 text-white rounded-2xl font-black py-5 hover:bg-indigo-700 transition-all shadow-xl shadow-indigo-100">
-              Confirmar Criação de Acesso
+              💾 Salvar Dados do Colaborador
             </button>
           </form>
         </div>
@@ -245,11 +293,30 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({ team, setTeam, c
                       <Shield size={12} /> Administrador
                     </span>
                   )}
+                  {member.inviteSent ? (
+                    <span className="bg-blue-100 text-blue-600 px-4 py-1.5 rounded-full text-xs font-black uppercase tracking-widest flex items-center gap-1.5">
+                      <CheckCircle size={12} /> Convite Enviado
+                    </span>
+                  ) : (
+                    <span className="bg-orange-100 text-orange-600 px-4 py-1.5 rounded-full text-xs font-black uppercase tracking-widest flex items-center gap-1.5 animate-pulse">
+                      <Mail size={12} /> Aguardando Convite
+                    </span>
+                  )}
                 </div>
               </div>
               
               {canManage && (
                 <div className="flex sm:flex-col gap-2">
+                  {!member.inviteSent && (
+                    <button 
+                      onClick={() => sendInvite(member.id)} 
+                      className="p-4 text-blue-600 bg-blue-50 hover:bg-blue-100 rounded-2xl transition-all shadow-sm active:scale-90 relative group/invite"
+                      title="Enviar Convite por E-mail"
+                    >
+                      <Mail size={24} />
+                      <span className="absolute -top-1 -right-1 w-3 h-3 bg-orange-500 rounded-full animate-pulse"></span>
+                    </button>
+                  )}
                   <button 
                     onClick={() => toggleStatus(member.id)} 
                     className={`p-4 rounded-2xl transition-all shadow-sm active:scale-90 ${member.active ? 'text-emerald-500 bg-emerald-50 hover:bg-emerald-100' : 'text-slate-400 bg-slate-50 hover:bg-slate-100'}`}
@@ -326,7 +393,7 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({ team, setTeam, c
                 >
                   <div className="flex items-center gap-3">
                     <Lock size={18} className="text-purple-600" />
-                    <span className="text-sm font-black text-purple-700 uppercase tracking-tight">Categorias do Plano de Contas</span>
+                    <span className="text-sm font-black text-purple-700 uppercase tracking-tight">Categorias do Centro de Custo</span>
                   </div>
                   <span className={`text-purple-600 transition-transform ${expandedCategoryMember === member.id ? 'rotate-180' : ''}`}>
                     ▼

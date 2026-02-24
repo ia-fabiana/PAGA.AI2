@@ -21,6 +21,11 @@ export interface ModulePermissions {
   team: boolean;
   profile: boolean;
   dre: boolean;
+  cashbox: boolean;
+  reconciliation?: boolean; // Conciliação Bancária
+  canEditBillDate?: boolean;
+  canCreateSupplier?: boolean;
+  canEditCashBoxStatus?: boolean;
 }
 
 export type AccountType = 'FIXED' | 'VARIABLE';
@@ -68,6 +73,8 @@ export interface TeamMember {
   active: boolean;
   permissions: ModulePermissions;
   categoryPermissions?: string[]; // IDs das categorias que pode acessar
+  inviteSent?: boolean; // Indica se o convite já foi enviado
+  inviteSentDate?: string; // Data do envio do convite
 }
 
 export interface Company {
@@ -98,6 +105,7 @@ export interface Bill {
   selectedMonths?: number[];
   specificDues?: { date: string, amount: number }[];
   isEstimate?: boolean;
+  launchedBy?: string; // Email/Login do usuário que lançou a conta
 }
 
 export interface FilterOptions {
@@ -105,4 +113,89 @@ export interface FilterOptions {
   endDate: string;
   status?: string;
   supplierId?: string;
+}
+
+export type CashBoxStatus = 'pending' | 'ok' | 'warning' | 'error' | 'sem_movimento';
+
+export interface CashBoxEntry {
+  date: string; // YYYY-MM-DD
+  din: number;
+  rede: number;
+  frog: number;
+  pagSeg: number;
+  inter: number;
+  status: CashBoxStatus;
+  observations?: string;
+  validatedBy?: string; // Email do ADM que validou
+  validatedAt?: string; // Timestamp da validação
+  isWeekendOrHoliday?: boolean;
+}
+
+export interface CashBoxData {
+  id: string;
+  date: string; // YYYY-MM-DD
+  dinTotal: number;
+  redeTotal: number;
+  frogTotal: number;
+  pagSegTotal: number;
+  interTotal: number;
+  grandTotal: number;
+  informedTotal?: number; // Valor total informado do caixa físico
+  status: CashBoxStatus; // 'pending', 'ok', 'warning', 'error'
+  observations: string;
+  createdBy: string;
+  createdAt: string;
+  validatedBy?: string; // Email do ADM
+  validatedAt?: string;
+  isWeekendOrHoliday: boolean;
+  methodStatuses?: Record<string, 'ok' | 'pending' | 'warning' | 'error' | 'sem_movimento'>; // Status por forma de pagamento
+  // Dados da Conciliação Bancária
+  interBankTotal?: number; // Valor que veio do extrato bancário
+  interBankTransactions?: BankTransaction[]; // Detalhes das transações PIX
+  interReconciled?: boolean; // Se foi conferido com o banco
+  interReconciledAt?: string; // Quando foi conferido
+  interReconciledBy?: string; // Quem conferiu
+}
+
+export interface PaymentMethod {
+  id: string;
+  name: string;
+  order: number;
+  enabled: boolean;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+// Conciliação Bancária
+export interface BankTransaction {
+  id: string;
+  date: string; // YYYY-MM-DD
+  time?: string; // HH:MM
+  type: 'CREDIT' | 'DEBIT';
+  amount: number;
+  description: string;
+  reference?: string; // ID da transação no banco
+  document?: string; // CNPJ/CPF se houver
+  reconciled: boolean;
+  reconciledWith?: string; // ID da conta/caixa que foi conciliada
+  reconciledType?: 'bill' | 'cashbox' | 'manual';
+  reconciledAt?: string;
+  reconciledBy?: string;
+}
+
+export interface BankReconciliation {
+  id: string;
+  uploadedAt: string;
+  uploadedBy: string;
+  fileName: string;
+  bankName: string; // Ex: "Banco Inter"
+  accountNumber: string;
+  startDate: string;
+  endDate: string;
+  initialBalance: number;
+  finalBalance: number;
+  totalTransactions: number;
+  reconciledTransactions: number;
+  transactions: BankTransaction[];
+  status: 'pending' | 'partial' | 'complete';
 }

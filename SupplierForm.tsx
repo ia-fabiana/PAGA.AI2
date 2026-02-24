@@ -23,7 +23,7 @@ export const SupplierForm: React.FC<SupplierFormProps> = ({ accounts, onClose, o
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!formData.name || !formData.accountId) {
-      alert('Preencha os campos obrigatórios (Nome e Plano de Contas)');
+      alert('Preencha os campos obrigatórios (Nome e Centro de Custo)');
       return;
     }
     onSubmit(formData as Supplier);
@@ -104,7 +104,7 @@ export const SupplierForm: React.FC<SupplierFormProps> = ({ accounts, onClose, o
 
           <div>
             <label className="block text-sm font-medium text-slate-700 mb-1 flex items-center gap-1">
-              <ListTree size={14} /> Plano de Contas Sugerido
+              <ListTree size={14} /> Centro de Custo Sugerido
             </label>
             <select 
               required

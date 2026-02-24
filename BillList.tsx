@@ -140,6 +140,7 @@ export const BillList: React.FC<BillListProps> = ({ bills, suppliers, accounts, 
         s?.name || 'N/A', 
         `${desc} ${typeLabel}`, 
         acc?.name || 'N/A',
+        b.launchedBy ? b.launchedBy.split('@')[0] : 'N/A',
         new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(b.amount), 
         formatDatePtBR(b.dueDate), 
         b.status
@@ -149,20 +150,21 @@ export const BillList: React.FC<BillListProps> = ({ bills, suppliers, accounts, 
     (doc as any).autoTable({ 
       startY: 34,
       columnStyles: {
-        0: { cellWidth: 50 },
+        0: { cellWidth: 45 },
         1: { cellWidth: 30 },
-        2: { cellWidth: 35 },
-        3: { cellWidth: 25, halign: 'right' },
-        4: { cellWidth: 25, halign: 'center' },
-        5: { cellWidth: 25, halign: 'center' }
+        2: { cellWidth: 30 },
+        3: { cellWidth: 25 },
+        4: { cellWidth: 25, halign: 'right' },
+        5: { cellWidth: 25, halign: 'center' },
+        6: { cellWidth: 20, halign: 'center' }
       },
-      head: [['Fornecedor', 'Descrição', 'Plano de Contas', 'Valor', 'Vencimento', 'Status']], 
+      head: [['Fornecedor', 'Descrição', 'Centro de Custo', 'Lançado Por', 'Valor', 'Vencimento', 'Status']], 
       body: tableData, 
       theme: 'grid', 
       headStyles: { fillStyle: '#4f46e5', textColor: '#ffffff', fontStyle: 'bold' },
       bodyStyles: { textColor: '#000000' },
       columnStyles: {
-        3: { halign: 'right', cellWidth: 28 }
+        4: { halign: 'right', cellWidth: 28 }
       }
     });
     
@@ -316,7 +318,8 @@ export const BillList: React.FC<BillListProps> = ({ bills, suppliers, accounts, 
               <tr className="border-b border-slate-100" style={{ backgroundColor: theme.colors.neutral.bgMain }}>
                 <th className="px-6 py-4 text-sm font-semibold text-slate-500 uppercase tracking-wider">Fornecedor / Descrição</th>
                 <th className="px-6 py-4 text-sm font-semibold text-slate-500 uppercase tracking-wider text-center">Tipo</th>
-                <th className="px-6 py-4 text-sm font-semibold text-slate-500 uppercase tracking-wider">Plano de Contas</th>
+                <th className="px-6 py-4 text-sm font-semibold text-slate-500 uppercase tracking-wider">Centro de Custo</th>
+                <th className="px-6 py-4 text-sm font-semibold text-slate-500 uppercase tracking-wider flex items-center gap-1"><User size={12} /> Lançado Por</th>
                 <th className="px-6 py-4 text-sm font-semibold text-slate-500 uppercase tracking-wider">Vencimento</th>
                 <th className="px-6 py-4 text-sm font-semibold text-slate-500 uppercase tracking-wider">Data de Pagamento</th>
                 <th className="px-6 py-4 text-sm font-semibold text-slate-500 uppercase tracking-wider">Valor Pago</th>
@@ -362,6 +365,12 @@ export const BillList: React.FC<BillListProps> = ({ bills, suppliers, accounts, 
                       <div className="flex items-center gap-2 text-xs px-3 py-1 rounded-full w-fit font-bold uppercase tracking-tighter" style={{ backgroundColor: '#EDE9FE', color: theme.colors.primary.purple }}>
                         <ListTree size={12} />
                         {account?.name || 'N/A'}
+                      </div>
+                    </td>
+                    <td className="px-6 py-4">
+                      <div className="text-sm text-slate-600 flex items-center gap-2">
+                        <User size={14} className="text-slate-400" />
+                        <span className="font-medium">{bill.launchedBy ? bill.launchedBy.split('@')[0] : 'N/A'}</span>
                       </div>
                     </td>
                     <td className="px-6 py-4">

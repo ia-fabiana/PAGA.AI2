@@ -10,6 +10,9 @@ import { TeamManagement } from './TeamManagement';
 import { CompanyProfile } from './CompanyProfile';
 import { AccountManagement } from './AccountManagement';
 import { DRE } from './DRE';
+import { CashBox } from './CashBox';
+import { CashBoxReport } from './CashBoxReport';
+import { BankReconciliationComponent } from './BankReconciliationComponent';
 import { Login } from './Login';
 import { auth, db, isMockMode } from './firebase';
 import { Bill, Supplier, BillStatus, UserRole, TeamMember, Company, ChartOfAccount, Revenue } from './types';
@@ -19,7 +22,7 @@ import { Loader2 } from 'lucide-react';
 const App: React.FC = () => {
   const [user, setUser] = useState<any>(null);
   const [loading, setLoading] = useState(true);
-  const [view, setView] = useState<'dashboard' | 'bills' | 'suppliers' | 'revenues' | 'team' | 'profile' | 'accounts' | 'dre'>('dashboard');
+  const [view, setView] = useState<'dashboard' | 'bills' | 'suppliers' | 'revenues' | 'team' | 'profile' | 'accounts' | 'dre' | 'cashbox' | 'cashbox-report' | 'reconciliation'>('dashboard');
   
   const [bills, setBills] = useState<Bill[]>([]);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
@@ -870,14 +873,15 @@ const App: React.FC = () => {
     role: UserRole.ADMIN, // Todos usuários autenticados são ADMIN
     active: true,
     permissions: {
-      dashboard: true, bills: true, suppliers: true, accounts: true, team: true, profile: true, dre: true
+      dashboard: true, bills: true, suppliers: true, accounts: true, team: true, profile: true, dre: true, cashbox: true, 'cashbox-report': true,
+      canEditCashBoxStatus: true
     }
   };
 
   return (
     <Layout currentView={view} setView={setView} user={currentUser} company={company}>
       <main className="flex-1 overflow-y-auto p-4 md:p-8">
-        {view === 'dashboard' && (
+        {view === 'dashboard' && currentUser.role === UserRole.ADMIN && (
           <Dashboard
             bills={bills}
             suppliers={suppliers}
@@ -888,6 +892,20 @@ const App: React.FC = () => {
             }}
             onStatusChange={handleBillStatusChange}
           />
+        )}
+        {view === 'dashboard' && currentUser.role !== UserRole.ADMIN && (
+          <div className="flex items-center justify-center h-screen">
+            <div className="text-center">
+              <h1 className="text-3xl font-bold text-slate-800 mb-4">Acesso Negado</h1>
+              <p className="text-slate-600 mb-6">Apenas administradores podem acessar o Dashboard.</p>
+              <button 
+                onClick={() => setView('bills')}
+                className="px-6 py-3 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors"
+              >
+                Ir para Contas a Pagar
+              </button>
+            </div>
+          </div>
         )}
         {view === 'bills' && (
           <BillList 
@@ -923,10 +941,14 @@ const App: React.FC = () => {
               setShowSupplierForm(true);
             }}
             userRole={currentUser.role}
+            canCreateSupplier={currentUser.permissions?.canCreateSupplier}
           />
         )}
         {view === 'accounts' && <AccountManagement accounts={accounts} setAccounts={setAccountsWithPersist} canManage={true} />}
         {view === 'dre' && <DRE bills={bills} revenues={revenues} accounts={accounts} setRevenues={setRevenuesWithPersist} />}
+        {view === 'cashbox' && <CashBox user={currentUser} onShowReport={() => setView('cashbox-report')} />}
+        {view === 'cashbox-report' && <CashBoxReport onBack={() => setView('cashbox')} canEdit={currentUser.permissions?.canEditCashBoxStatus} />}
+        {view === 'reconciliation' && <BankReconciliationComponent user={currentUser} />}
         {view === 'team' && <TeamManagement team={team} setTeam={setTeamWithPersist} canManage={true} accounts={accounts} />}
         {view === 'profile' && <CompanyProfile company={company} setCompany={setCompanyWithPersist} canEdit={true} />}
       </main>
@@ -941,6 +963,8 @@ const App: React.FC = () => {
           }}
           onSubmit={handleBillSubmit}
           initialData={editingBill}
+          userEmail={user.email}
+          canEditBillDate={currentUser.permissions?.canEditBillDate}
         />
       )}
 

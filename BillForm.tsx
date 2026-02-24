@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { Bill, Supplier, BillStatus, RecurrenceType, ChartOfAccount } from './types';
-import { X, Calendar, DollarSign, Repeat, Layers, Check, ListTree, Plus, Trash2 } from 'lucide-react';
+import { X, Calendar, DollarSign, Repeat, Layers, Check, ListTree, Plus, Trash2, User } from 'lucide-react';
 
 interface BillFormProps {
   suppliers: Supplier[];
@@ -9,9 +9,11 @@ interface BillFormProps {
   onClose: () => void;
   onSubmit: (bill: Bill) => void;
   initialData?: Bill;
+  userEmail?: string;
+  canEditBillDate?: boolean;
 }
 
-export const BillForm: React.FC<BillFormProps> = ({ suppliers, accounts, onClose, onSubmit, initialData }) => {
+export const BillForm: React.FC<BillFormProps> = ({ suppliers, accounts, onClose, onSubmit, initialData, userEmail, canEditBillDate }) => {
   const [formData, setFormData] = useState<Partial<Bill>>(initialData || {
     description: '',
     amount: 0,
@@ -25,7 +27,8 @@ export const BillForm: React.FC<BillFormProps> = ({ suppliers, accounts, onClose
     accountId: accounts[0]?.id || '',
     totalInstallments: 1,
     selectedMonths: [],
-    specificDues: [{ date: new Date().toISOString().split('T')[0], amount: 0 }]
+    specificDues: [{ date: new Date().toISOString().split('T')[0], amount: 0 }],
+    launchedBy: initialData?.launchedBy || userEmail || ''
   });
 
   const months = [
@@ -154,7 +157,7 @@ export const BillForm: React.FC<BillFormProps> = ({ suppliers, accounts, onClose
             </div>
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-1 flex items-center gap-1">
-                <ListTree size={14} /> Plano de Contas
+                <ListTree size={14} /> Centro de Custo
               </label>
               <select 
                 required
@@ -168,6 +171,18 @@ export const BillForm: React.FC<BillFormProps> = ({ suppliers, accounts, onClose
                 ))}
               </select>
             </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1 flex items-center gap-1">
+                <User size={14} /> Lançado Por
+              </label>
+              <div className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-slate-600 text-sm font-medium">
+                {formData.launchedBy || userEmail || 'N/A'}
+              </div>
+            </div>
+            <div></div>
           </div>
 
           <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-3">
@@ -313,9 +328,11 @@ export const BillForm: React.FC<BillFormProps> = ({ suppliers, accounts, onClose
                     <div>
                       <label className="block text-xs font-bold text-slate-500 mb-1 flex items-center gap-1">
                         <Calendar size={12} /> Vencimento
+                        {!canEditBillDate && initialData && <span className="text-rose-500 text-xs">(Sem Permissão)</span>}
                       </label>
                       <input 
-                        type="date" className="w-full px-4 py-2 bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none"
+                        type="date" className="w-full px-4 py-2 bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none disabled:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+                        disabled={!canEditBillDate && initialData}
                         value={formData.dueDate}
                         onChange={e => setFormData({ ...formData, dueDate: e.target.value })}
                       />

@@ -92,7 +92,7 @@ export const AccountManagement: React.FC<AccountManagementProps> = ({ accounts, 
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-black text-slate-800 flex items-center gap-2">
-            Plano de Contas por Tela
+            Centro de Custo por Tela
             <Settings2 size={24} className="text-indigo-600" />
           </h1>
           <p className="text-slate-500 font-medium">Cada categoria abaixo representa uma "Aba" da sua planilha comercial.</p>

@@ -11,9 +11,10 @@ interface SupplierListProps {
   onDelete: (id: string) => void;
   onOpenForm: () => void;
   userRole: UserRole;
+  canCreateSupplier?: boolean;
 }
 
-export const SupplierList: React.FC<SupplierListProps> = ({ suppliers, accounts, onEdit, onDelete, onOpenForm, userRole }) => {
+export const SupplierList: React.FC<SupplierListProps> = ({ suppliers, accounts, onEdit, onDelete, onOpenForm, userRole, canCreateSupplier }) => {
   const [search, setSearch] = React.useState('');
 
   const filteredSuppliers = suppliers.filter(s => 
@@ -21,6 +22,7 @@ export const SupplierList: React.FC<SupplierListProps> = ({ suppliers, accounts,
     s.taxId.includes(search)
   ).sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'));
 
+  const canCreate = canCreateSupplier || (userRole !== UserRole.VIEWER);
   const canEdit = userRole !== UserRole.VIEWER;
   const canDelete = userRole === UserRole.ADMIN;
 
@@ -31,7 +33,7 @@ export const SupplierList: React.FC<SupplierListProps> = ({ suppliers, accounts,
           <h1 className="text-2xl font-bold" style={{ color: theme.colors.neutral.black }}>Fornecedores</h1>
           <p className="text-slate-500">Cadastre e gerencie os parceiros do seu negócio.</p>
         </div>
-        {canEdit && (
+        {canCreate && (
           <button 
             onClick={onOpenForm}
             className="flex items-center gap-2 px-4 py-2 rounded-xl text-white hover:shadow-lg hover:-translate-y-0.5 transition-all font-medium shadow-md"

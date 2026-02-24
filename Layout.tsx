@@ -1,6 +1,6 @@
 
 import React from 'react';
-import { LayoutDashboard, Receipt, Users, ShieldCheck, Building2, Menu, X, Wallet, LogOut, ListTree, FilePieChart, Github, Zap, Shield } from 'lucide-react';
+import { LayoutDashboard, Receipt, Users, ShieldCheck, Building2, Menu, X, Wallet, LogOut, ListTree, FilePieChart, Github, Zap, Shield, DollarSign, Landmark } from 'lucide-react';
 import { TeamMember, Company } from './types';
 import { auth } from './firebase';
 
@@ -18,13 +18,21 @@ export const Layout: React.FC<LayoutProps> = ({ children, currentView, setView, 
   const navItems = [
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, permission: 'dashboard' },
     { id: 'dre', label: 'DRE Gerencial', icon: FilePieChart, permission: 'dre' },
+    { id: 'cashbox', label: 'Caixa', icon: DollarSign, permission: 'cashbox' },
+    { id: 'reconciliation', label: 'Conciliação Bancária', icon: Landmark, permission: 'reconciliation' },
     { id: 'bills', label: 'Contas a Pagar', icon: Receipt, permission: 'bills' },
     { id: 'suppliers', label: 'Fornecedores', icon: Users, permission: 'suppliers' },
-    { id: 'accounts', label: 'Plano de Contas', icon: ListTree, permission: 'accounts' },
+    { id: 'accounts', label: 'Centro de Custo', icon: ListTree, permission: 'accounts' },
     { id: 'team', label: 'Equipe', icon: ShieldCheck, permission: 'team' },
     { id: 'profile', label: 'Empresa', icon: Building2, permission: 'profile' },
   ].filter(item => {
     if (!user.permissions) return true;
+    
+    // Dashboard: apenas ADMIN pode ver
+    if (item.id === 'dashboard') {
+      return user.role === 'ADMIN' && user.permissions[item.permission as keyof typeof user.permissions];
+    }
+    
     return user.permissions[item.permission as keyof typeof user.permissions];
   });
 
