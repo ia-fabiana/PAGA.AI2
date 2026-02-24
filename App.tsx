@@ -873,7 +873,7 @@ const App: React.FC = () => {
     role: UserRole.ADMIN, // Todos usuários autenticados são ADMIN
     active: true,
     permissions: {
-      dashboard: true, bills: true, suppliers: true, accounts: true, team: true, profile: true, dre: true, cashbox: true, 'cashbox-report': true,
+      dashboard: true, bills: true, suppliers: true, accounts: true, team: true, profile: true, dre: true, cashbox: true, 'cashbox-report': true, reconciliation: true,
       canEditCashBoxStatus: true
     }
   };
