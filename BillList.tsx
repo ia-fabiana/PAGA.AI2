@@ -734,7 +734,8 @@ export const BillList: React.FC<BillListProps> = ({ bills, suppliers, accounts, 
                       : 0}%
                   </p>
                 </div>
-              </div>              <button
+              </div>
+              <button
                 onClick={() => setShowReconcileModal(false)}
                 className="w-full px-6 py-3 bg-slate-800 text-white rounded-xl font-bold hover:bg-slate-900 transition-colors"
               >
