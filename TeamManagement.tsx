@@ -4,7 +4,7 @@ import { TeamMember, UserRole, ModulePermissions, ChartOfAccount } from './types
 import { 
   UserPlus, Shield, Mail, Trash2, CheckCircle, XCircle, 
   LayoutDashboard, Receipt, Users, ListTree, Building2, 
-  UserCog, Check, ShieldCheck, ToggleLeft, ToggleRight, Sparkles, Lock, Unlock, Calendar, DollarSign, FilePieChart, Landmark
+  UserCog, Check, ShieldCheck, ToggleLeft, ToggleRight, Sparkles, Lock, Unlock, Calendar, DollarSign, FilePieChart, Landmark, CreditCard
 } from 'lucide-react';
 
 interface TeamManagementProps {
@@ -122,6 +122,7 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({ team, setTeam, c
     { id: 'dre', label: 'DRE', icon: FilePieChart, color: 'pink' },
     { id: 'cashbox', label: 'Caixa', icon: DollarSign, color: 'green' },
     { id: 'reconciliation', label: 'Conciliação Bancária', icon: Landmark, color: 'teal' },
+    { id: 'bills_reconciliation', label: 'Conciliação Despesas', icon: CreditCard, color: 'cyan' },
     { id: 'team', label: 'Equipe', icon: UserCog, color: 'orange' },
     { id: 'profile', label: 'Empresa', icon: Building2, color: 'slate' },
     { id: 'canEditBillDate', label: 'Editar Data Lançamento', icon: Calendar, color: 'cyan' },

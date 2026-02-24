@@ -1,6 +1,6 @@
 
 import React from 'react';
-import { LayoutDashboard, Receipt, Users, ShieldCheck, Building2, Menu, X, Wallet, LogOut, ListTree, FilePieChart, Github, Zap, Shield, DollarSign, Landmark } from 'lucide-react';
+import { LayoutDashboard, Receipt, Users, ShieldCheck, Building2, Menu, X, Wallet, LogOut, ListTree, FilePieChart, Github, Zap, Shield, DollarSign, Landmark, CreditCard } from 'lucide-react';
 import { TeamMember, Company } from './types';
 import { auth } from './firebase';
 
@@ -21,6 +21,7 @@ export const Layout: React.FC<LayoutProps> = ({ children, currentView, setView, 
     { id: 'cashbox', label: 'Caixa', icon: DollarSign, permission: 'cashbox' },
     { id: 'reconciliation', label: 'Conciliação Bancária', icon: Landmark, permission: 'reconciliation' },
     { id: 'bills', label: 'Contas a Pagar', icon: Receipt, permission: 'bills' },
+    { id: 'bills-reconciliation', label: 'Conciliação Despesas', icon: CreditCard, permission: 'bills_reconciliation' },
     { id: 'suppliers', label: 'Fornecedores', icon: Users, permission: 'suppliers' },
     { id: 'accounts', label: 'Centro de Custo', icon: ListTree, permission: 'accounts' },
     { id: 'team', label: 'Equipe', icon: ShieldCheck, permission: 'team' },

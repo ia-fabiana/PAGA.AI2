@@ -234,3 +234,85 @@ export function getPixReceivedTransactions(transactions: BankTransaction[]): Ban
     (t.description.includes('PIX RECEBIDO') || t.description.includes('RECEBIMENTO'))
   );
 }
+/**
+ * Extrai apenas transações de DÉBITO
+ */
+export function getDebitTransactions(transactions: BankTransaction[]): BankTransaction[] {
+  return transactions.filter(t => t.type === 'DEBIT').sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+}
+
+/**
+ * Calcula total de débitos para uma data específica
+ */
+export function getTotalDebitsForDate(transactions: BankTransaction[], date: string): number {
+  return transactions
+    .filter(t => t.type === 'DEBIT' && t.date === date)
+    .reduce((sum, t) => sum + t.amount, 0);
+}
+
+/**
+ * Tenta fazer matching automático entre débitos e Bills
+ * Retorna um objeto com score de confiança (0-100) para cada possível match
+ */
+export function matchDebitWithBills(debit: BankTransaction, bills: any[]): { billId: string; score: number }[] {
+  const matches: { billId: string; score: number }[] = [];
+  const debitDate = new Date(debit.date);
+  const debitAmount = debit.amount;
+  
+  bills.forEach(bill => {
+    let score = 0;
+    
+    // Match exato de valor (100 pontos)
+    if (bill.amount === debitAmount) {
+      score += 100;
+    } else if (Math.abs(bill.amount - debitAmount) < 0.01) {
+      // Match com até 1 centavo de diferença (99 pontos)
+      score += 99;
+    } else if (Math.abs(bill.amount - debitAmount) < 1) {
+      // Match com até R$1 de diferença (50 pontos)
+      score += 50;
+    }
+    
+    // Match de data (dentro de ±3 dias = 30 pontos)
+    if (score > 0) {
+      const billDate = new Date(bill.paidDate || bill.dueDate);
+      const daysDiff = Math.abs(Math.floor((debitDate.getTime() - billDate.getTime()) / (1000 * 60 * 60 * 24)));
+      
+      if (daysDiff === 0) {
+        score += 30; // Mesma data
+      } else if (daysDiff <= 3) {
+        score += 20; // Dentro de 3 dias
+      }
+    }
+    
+    // Match de descrição (configuração fuzzy básica)
+    if (score > 0 && bill.description) {
+      const debitDesc = debit.description.toUpperCase();
+      const billDesc = bill.description.toUpperCase();
+      
+      // Verifica se tem palavras em comum (mínimo 3 caracteres)
+      const debitWords = debitDesc.split(/\s+/);
+      const billWords = billDesc.split(/\s+/);
+      
+      let commonWords = 0;
+      debitWords.forEach(word => {
+        if (word.length >= 3 && billWords.some(bw => bw.includes(word))) {
+          commonWords++;
+        }
+      });
+      
+      if (commonWords > 0) {
+        score += 10; // Tem palavras em comum
+      }
+    }
+    
+    if (score > 0) {
+      matches.push({ billId: bill.id, score });
+    }
+  });
+  
+  // Retorna matches ordenados por score descendente, apenas > 50
+  return matches
+    .filter(m => m.score > 50)
+    .sort((a, b) => b.score - a.score);
+}

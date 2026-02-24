@@ -22,7 +22,8 @@ export interface ModulePermissions {
   profile: boolean;
   dre: boolean;
   cashbox: boolean;
-  reconciliation?: boolean; // Conciliação Bancária
+  reconciliation?: boolean; // Conciliação Bancária (Receitas)
+  'bills_reconciliation'?: boolean; // Conciliação de Despesas
   canEditBillDate?: boolean;
   canCreateSupplier?: boolean;
   canEditCashBoxStatus?: boolean;
@@ -197,5 +198,32 @@ export interface BankReconciliation {
   totalTransactions: number;
   reconciledTransactions: number;
   transactions: BankTransaction[];
+  status: 'pending' | 'partial' | 'complete';
+}
+
+export interface BillReconciliationMatch {
+  id: string; // unique ID para este match
+  bankTransaction: BankTransaction; // Débito do extrato
+  billId?: string; // ID da Bill matched (pode ser undefined antes de confirmar)
+  matchType: 'auto' | 'manual' | 'none'; // auto = matched automaticamente, manual = user confirmou, none = débito sem Bill
+  matchScore?: number; // 0-100: confiança do match automático
+  confirmedAt?: string;
+  confirmedBy?: string;
+  notes?: string;
+}
+
+export interface BillsReconciliation {
+  id: string;
+  uploadedAt: string;
+  uploadedBy: string;
+  fileName: string;
+  bankName: string;
+  accountNumber: string;
+  startDate: string;
+  endDate: string;
+  debitTransactions: BankTransaction[]; // Apenas débitos
+  matches: BillReconciliationMatch[]; // Matches entre débitos e Bills
+  totalDebits: number;
+  totalMatched: number;
   status: 'pending' | 'partial' | 'complete';
 }
