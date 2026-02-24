@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Upload, X, CheckCircle, AlertCircle, Loader, Download } from 'lucide-react';
 import { TeamMember, Bill, BillReconciliationMatch, BillsReconciliation } from './types';
-import { parseBancoInterCNAB, getDebitTransactions, matchDebitWithBills } from './cnabParser';
+import { parseUniversalBankExtract, getDebitTransactions, matchDebitWithBills } from './cnabParser';
 
 interface BillsReconciliationComponentProps {
   user: TeamMember;
@@ -33,12 +33,13 @@ export const BillsReconciliationComponent: React.FC<BillsReconciliationComponent
 
     setIsLoading(true);
     try {
-      const fileContent = await file.text();
+      const isPdf = file.name.toLowerCase().endsWith('.pdf');
+      const fileContent = isPdf ? await file.arrayBuffer() : await file.text();
       setFileName(file.name);
       setUploadedAt(new Date().toISOString());
 
-      // Parse CNAB
-      const reconciliation = parseBancoInterCNAB(fileContent, file.name, user.email);
+      // Parse universal - detecta e rota para o formato correto
+      const reconciliation = await parseUniversalBankExtract(fileContent, file.name, user.email);
 
       // Extrai apenas débitos
       const debits = getDebitTransactions(reconciliation.transactions);
@@ -191,11 +192,11 @@ export const BillsReconciliationComponent: React.FC<BillsReconciliationComponent
           </div>
           <div className="text-center">
             <p className="text-lg font-bold text-slate-800">Clique para fazer upload do extrato</p>
-            <p className="text-sm text-slate-500">Arquivo .RET ou .txt (Banco Inter CNAB 240)</p>
+            <p className="text-sm text-slate-500">Arquivo .RET, .TXT ou .PDF (Banco Inter CNAB 240)</p>
           </div>
           <input
             type="file"
-            accept=".ret,.txt"
+            accept=".ret,.txt,.pdf"
             onChange={handleFileUpload}
             disabled={isLoading}
             className="hidden"

@@ -13,7 +13,7 @@ import { DRE } from './DRE';
 import { CashBox } from './CashBox';
 import { CashBoxReport } from './CashBoxReport';
 import { BankReconciliationComponent } from './BankReconciliationComponent';
-import { BillsReconciliationComponent } from './BillsReconciliationComponent';
+
 import { Login } from './Login';
 import { auth, db, isMockMode } from './firebase';
 import { Bill, Supplier, BillStatus, UserRole, TeamMember, Company, ChartOfAccount, Revenue } from './types';
@@ -23,7 +23,7 @@ import { Loader2 } from 'lucide-react';
 const App: React.FC = () => {
   const [user, setUser] = useState<any>(null);
   const [loading, setLoading] = useState(true);
-  const [view, setView] = useState<'dashboard' | 'bills' | 'suppliers' | 'revenues' | 'team' | 'profile' | 'accounts' | 'dre' | 'cashbox' | 'cashbox-report' | 'reconciliation' | 'bills-reconciliation'>('dashboard');
+  const [view, setView] = useState<'dashboard' | 'bills' | 'suppliers' | 'revenues' | 'team' | 'profile' | 'accounts' | 'dre' | 'cashbox' | 'cashbox-report' | 'reconciliation'>('dashboard');
   
   const [bills, setBills] = useState<Bill[]>([]);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
@@ -950,7 +950,6 @@ const App: React.FC = () => {
         {view === 'cashbox' && <CashBox user={currentUser} onShowReport={() => setView('cashbox-report')} />}
         {view === 'cashbox-report' && <CashBoxReport onBack={() => setView('cashbox')} canEdit={currentUser.permissions?.canEditCashBoxStatus} />}
         {view === 'reconciliation' && <BankReconciliationComponent user={currentUser} />}
-        {view === 'bills-reconciliation' && <BillsReconciliationComponent user={currentUser} bills={bills} />}
         {view === 'team' && <TeamManagement team={team} setTeam={setTeamWithPersist} canManage={true} accounts={accounts} />}
         {view === 'profile' && <CompanyProfile company={company} setCompany={setCompanyWithPersist} canEdit={true} />}
       </main>

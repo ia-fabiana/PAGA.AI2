@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "firebase": "^11.10.0",
+    "pdfjs-dist": "^4.10.38",
     "jspdf": "2.5.1",
     "jspdf-autotable": "3.8.2",
     "lucide-react": "0.460.0",

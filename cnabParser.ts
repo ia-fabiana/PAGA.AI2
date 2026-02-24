@@ -1,4 +1,49 @@
 import { BankTransaction, BankReconciliation } from './types';
+import * as pdfjsLib from 'pdfjs-dist';
+
+// Configure worker via CDN (mais compatível com Vite)
+pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.mjs`;
+
+/**
+ * Parser genérico para múltiplos formatos de extrato bancário
+ * Suporta: CNAB 240, TXT, PDF
+ */
+
+export enum FileFormat {
+  CNAB = 'CNAB',
+  TXT = 'TXT',
+  PDF = 'PDF',
+  UNKNOWN = 'UNKNOWN'
+}
+
+/**
+ * Detecta o formato do arquivo baseado no conteúdo e extensão
+ */
+export function detectFileFormat(fileContent: string | ArrayBuffer, fileName: string): FileFormat {
+  const ext = fileName.split('.').pop()?.toUpperCase() || '';
+
+  if (ext === 'PDF') {
+    return FileFormat.PDF;
+  }
+
+  if (ext === 'RET' || ext === 'TXT') {
+    return FileFormat.CNAB;
+  }
+
+  if (typeof fileContent === 'string') {
+    // Se começar com CNAB pattern
+    if (fileContent.includes('0770001300')) {
+      return FileFormat.CNAB;
+    }
+
+    // Tenta detectar por conteúdo
+    if (fileContent.includes('PIX') && fileContent.includes('RECEBIDO')) {
+      return FileFormat.CNAB;
+    }
+  }
+
+  return FileFormat.UNKNOWN;
+}
 
 /**
  * Parser para arquivos CNAB 240 do Banco Inter
@@ -108,6 +153,9 @@ function formatDate(ddmmyyyy: string): string {
 export function parseBancoInterCNAB(fileContent: string, fileName: string, uploadedBy: string): BankReconciliation {
   const lines = fileContent.split('\n').filter(line => line.trim().length > 0);
   
+  console.log('🏦 CNAB - Total de linhas:', lines.length);
+  console.log('🏦 CNAB - Primeira linha:', lines[0]?.substring(0, 50));
+  
   const transactions: BankTransaction[] = [];
   let header: CNABHeader | null = null;
   let minDate = '';
@@ -131,27 +179,43 @@ export function parseBancoInterCNAB(fileContent: string, fileName: string, uploa
         const sequenceStr = line.substring(10, 15);
         const sequenceNumber = parseInt(sequenceStr);
         
-        // Data: posição 73-80 no formato DDMMAAAA
-        const dateStr = line.substring(73, 81);
-        const day = dateStr.substring(1, 3);
-        const month = dateStr.substring(3, 5);
-        const year = dateStr.substring(5, 9);
-        const date = `${year}-${month}-${day}`;
+        // Encontra a posição do padrão de data (DDMMAAAA seguido do valor)
+        // Exemplo: S0201202602012026000000000005000000C
+        // A data real é a segunda (02012026 = 02/01/2026)
+        const datePattern = line.match(/S\d{8}(\d{8})/);
+        let date = '';
+        if (datePattern) {
+          const dateStr = datePattern[1]; // 02012026
+          const day = dateStr.substring(0, 2);
+          const month = dateStr.substring(2, 4);
+          const year = dateStr.substring(4, 8);
+          date = `${year}-${month}-${day}`;
+        }
+        
+        if (!date) {
+          console.log('⚠️ Data não encontrada na linha:', line.substring(0, 100));
+          continue;
+        }
         
         // Atualiza datas min/max
         if (!minDate || date < minDate) minDate = date;
         if (!maxDate || date > maxDate) maxDate = date;
         
-        // Valor: posição 94-108 (15 dígitos, últimos 2 são decimais)
-        const amountStr = line.substring(94, 109);
-        const amount = parseInt(amountStr) / 100;
+        // Valor: vem depois da data, 17 dígitos (15 + 2 decimais)
+        const valuePattern = line.match(/S\d{8}\d{8}(\d{17})/);
+        let amount = 0;
+        if (valuePattern) {
+          amount = parseInt(valuePattern[1]) / 100;
+        }
         
-        // Tipo: C ou D
-        const typeChar = line.substring(109, 110);
+        // Tipo: vem logo depois do valor (C ou D)
+        const typePattern = line.match(/S\d{8}\d{8}\d{17}([CD])/);
+        const typeChar = typePattern ? typePattern[1] : 'D';
         const type: 'CREDIT' | 'DEBIT' = typeChar === 'C' ? 'CREDIT' : 'DEBIT';
         
-        // Descrição
-        const description = line.substring(110, 135).trim();
+        // Descrição: vem depois do código do banco (geralmente após 7 dígitos)
+        const descPattern = line.match(/[CD]\d{7}(.{25})/);
+        const description = descPattern ? descPattern[1].trim() : 'Sem descrição';
         
         // Referência
         const reference = line.substring(135, 160).trim();
@@ -173,6 +237,18 @@ export function parseBancoInterCNAB(fileContent: string, fileName: string, uploa
       }
     }
   }
+  
+  console.log('🏦 CNAB - Total de transações encontradas:', transactions.length);
+  console.log('🏦 CNAB - Distribuição:', {
+    creditos: transactions.filter(t => t.type === 'CREDIT').length,
+    debitos: transactions.filter(t => t.type === 'DEBIT').length
+  });
+  console.log('🏦 CNAB - Primeiras 5 transações:', transactions.slice(0, 5).map(t => ({
+    date: t.date,
+    type: t.type,
+    amount: t.amount,
+    description: t.description.substring(0, 30)
+  })));
   
   // Calcula saldos
   const credits = transactions.filter(t => t.type === 'CREDIT').reduce((sum, t) => sum + t.amount, 0);
@@ -261,27 +337,55 @@ export function matchDebitWithBills(debit: BankTransaction, bills: any[]): { bil
   
   bills.forEach(bill => {
     let score = 0;
+    let scoreBreakdown = { amount: 0, date: 0, description: 0 };
     
-    // Match exato de valor (100 pontos)
-    if (bill.amount === debitAmount) {
+    // Usa paidAmount se disponível, senão usa amount
+    const billAmount = bill.paidAmount || bill.amount;
+    const amountDiff = Math.abs(billAmount - debitAmount);
+    
+    // Match de valor - mais flexível
+    if (amountDiff < 0.01) {
+      // Match exato ou quase exato (até 1 centavo)
       score += 100;
-    } else if (Math.abs(bill.amount - debitAmount) < 0.01) {
-      // Match com até 1 centavo de diferença (99 pontos)
-      score += 99;
-    } else if (Math.abs(bill.amount - debitAmount) < 1) {
-      // Match com até R$1 de diferença (50 pontos)
-      score += 50;
+      scoreBreakdown.amount = 100;
+    } else if (amountDiff < 1) {
+      // Até R$1 de diferença
+      score += 80;
+      scoreBreakdown.amount = 80;
+    } else if (amountDiff < 5) {
+      // Até R$5 de diferença
+      score += 60;
+      scoreBreakdown.amount = 60;
+    } else if (amountDiff < 10) {
+      // Até R$10 de diferença
+      score += 40;
+      scoreBreakdown.amount = 40;
+    } else if (amountDiff < 50) {
+      // Até R$50 de diferença (para contas maiores)
+      score += 20;
+      scoreBreakdown.amount = 20;
     }
     
-    // Match de data (dentro de ±3 dias = 30 pontos)
+    // Match de data - MUITO flexível (até 30 dias)
     if (score > 0) {
       const billDate = new Date(bill.paidDate || bill.dueDate);
       const daysDiff = Math.abs(Math.floor((debitDate.getTime() - billDate.getTime()) / (1000 * 60 * 60 * 24)));
       
       if (daysDiff === 0) {
         score += 30; // Mesma data
+        scoreBreakdown.date = 30;
       } else if (daysDiff <= 3) {
-        score += 20; // Dentro de 3 dias
+        score += 25; // Dentro de 3 dias
+        scoreBreakdown.date = 25;
+      } else if (daysDiff <= 7) {
+        score += 20; // Dentro de 7 dias
+        scoreBreakdown.date = 20;
+      } else if (daysDiff <= 15) {
+        score += 15; // Dentro de 15 dias
+        scoreBreakdown.date = 15;
+      } else if (daysDiff <= 30) {
+        score += 10; // Dentro de 30 dias (muito flexível)
+        scoreBreakdown.date = 10;
       }
     }
     
@@ -303,7 +407,14 @@ export function matchDebitWithBills(debit: BankTransaction, bills: any[]): { bil
       
       if (commonWords > 0) {
         score += 10; // Tem palavras em comum
+        scoreBreakdown.description = 10;
       }
+    }
+    
+    // Log detalhado para debugging
+    if (score > 0 && score < 60) {
+      console.log(`⚠️ MATCH BAIXO (${score} pts) - Débito: R$${debitAmount.toFixed(2)} em ${debit.date} vs Bill: R$${billAmount.toFixed(2)} venc ${bill.dueDate} pago ${bill.paidDate || 'N/A'}`);
+      console.log(`   Breakdown: valor=${scoreBreakdown.amount}, data=${scoreBreakdown.date}, desc=${scoreBreakdown.description} | Diff: R$${amountDiff.toFixed(2)}`);
     }
     
     if (score > 0) {
@@ -311,8 +422,355 @@ export function matchDebitWithBills(debit: BankTransaction, bills: any[]): { bil
     }
   });
   
-  // Retorna matches ordenados por score descendente, apenas > 50
-  return matches
-    .filter(m => m.score > 50)
-    .sort((a, b) => b.score - a.score);
+  // Retorna matches ordenados por score descendente, apenas >= 30 (threshold muito baixo para capturar mais)
+  const validMatches = matches.filter(m => m.score >= 30);
+  
+  if (matches.length > 0 && validMatches.length === 0) {
+    console.log(`🔍 Débito R$${debitAmount.toFixed(2)} em ${debit.date} teve ${matches.length} matches mas todos abaixo de 30 pts`);
+    console.log(`   Melhores scores: ${matches.slice(0, 3).map(m => m.score).join(', ')}`);
+  }
+  
+  return validMatches.sort((a, b) => b.score - a.score);
+}
+
+/**
+ * Parser para TXT simples (extrato em formato de texto puro)
+ * Formato esperado: Data | Descrição | Tipo (C/D) | Valor
+ * Exemplo: 25/01/2026 | PIX RECEBIDO | C | 1000.00
+ */
+export function parseTextExtract(fileContent: string, fileName: string, uploadedBy: string): BankReconciliation {
+  const lines = fileContent.split('\n').filter(line => line.trim().length > 0);
+  const transactions: BankTransaction[] = [];
+  let minDate = '';
+  let maxDate = '';
+  
+  lines.forEach((line, index) => {
+    // Pula header ou linhas com títulos
+    if (line.includes('Data') || line.includes('Descrição') || line.includes('Valor') || line.includes('---')) {
+      return;
+    }
+    
+    try {
+      // Tenta fazer parse de diferentes separadores: | , Tab
+      const parts = line.includes('|') 
+        ? line.split('|').map(p => p.trim())
+        : line.split('\t').map(p => p.trim());
+      
+      if (parts.length < 4) return;
+      
+      // Esperado: [data, descrição, tipo, valor, ...]
+      const dateStr = parts[0];
+      const description = parts[1];
+      const typeChar = parts[2].toUpperCase();
+      const amountStr = parts[3].replace(/[R$\s,]/g, '').replace('.', '').replace(',', '.');
+      
+      // Parse da data (DD/MM/YYYY ou DD-MM-YYYY)
+      let date = '';
+      if (dateStr.includes('/')) {
+        const [day, month, year] = dateStr.split('/');
+        date = `${year}-${month}-${day}`;
+      } else if (dateStr.includes('-')) {
+        const parts = dateStr.split('-');
+        if (parts.length === 3 && parts[0].length === 2) {
+          // DD-MM-YYYY
+          date = `${parts[2]}-${parts[1]}-${parts[0]}`;
+        } else {
+          // YYYY-MM-DD
+          date = dateStr;
+        }
+      }
+      
+      if (!date) return;
+      
+      const type: 'CREDIT' | 'DEBIT' = typeChar === 'C' ? 'CREDIT' : 'DEBIT';
+      const amount = parseFloat(amountStr) || 0;
+      
+      if (amount > 0) {
+        // Atualiza datas min/max
+        if (!minDate || date < minDate) minDate = date;
+        if (!maxDate || date > maxDate) maxDate = date;
+        
+        const transaction: BankTransaction = {
+          id: `txt-${date}-${index}-${description}`,
+          date,
+          type,
+          amount,
+          description,
+          reference: `${index}`,
+          reconciled: false
+        };
+        
+        transactions.push(transaction);
+      }
+    } catch (error) {
+      console.error('Erro ao processar linha TXT:', line, error);
+    }
+  });
+  
+  const credits = transactions.filter(t => t.type === 'CREDIT').reduce((sum, t) => sum + t.amount, 0);
+  const debits = transactions.filter(t => t.type === 'DEBIT').reduce((sum, t) => sum + t.amount, 0);
+  
+  const reconciliation: BankReconciliation = {
+    id: `reconciliation-${Date.now()}`,
+    uploadedAt: new Date().toISOString(),
+    uploadedBy,
+    fileName,
+    bankName: 'Banco Inter (TXT)',
+    accountNumber: 'Desconhecida',
+    startDate: minDate || '',
+    endDate: maxDate || '',
+    initialBalance: 0,
+    finalBalance: credits - debits,
+    totalTransactions: transactions.length,
+    reconciledTransactions: 0,
+    transactions,
+    status: 'pending'
+  };
+  
+  return reconciliation;
+}
+
+/**
+ * Parser para PDF (placeholder - requer biblioteca PDF)
+ * Por enquanto retorna erro sugestivo
+ */
+function parseBrazilianAmount(value: string): number {
+  const cleaned = value
+    .replace(/[R$\s]/g, '')
+    .replace(/\./g, '')
+    .replace(',', '.')
+    .replace(/[^0-9.-]/g, '');
+
+  return parseFloat(cleaned);
+}
+
+function extractPdfDateRange(lines: string[]): { startDate: string; endDate: string; yearFallback?: string } {
+  const dateRangeRegex = /(\d{2}\/\d{2}\/\d{4}).*(\d{2}\/\d{2}\/\d{4})/;
+
+  for (const line of lines) {
+    const match = line.match(dateRangeRegex);
+    if (match) {
+      const [start, end] = [match[1], match[2]];
+      const startParts = start.split('/');
+      const endParts = end.split('/');
+      return {
+        startDate: `${startParts[2]}-${startParts[1]}-${startParts[0]}`,
+        endDate: `${endParts[2]}-${endParts[1]}-${endParts[0]}`,
+        yearFallback: startParts[2]
+      };
+    }
+  }
+
+  return { startDate: '', endDate: '' };
+}
+
+function normalizePdfLine(line: string): string {
+  return line.replace(/\s+/g, ' ').trim();
+}
+
+function shouldSkipPdfLine(line: string): boolean {
+  const upper = line.toUpperCase();
+  const blacklist = [
+    'EXTRATO',
+    'PERIODO',
+    'PERÍODO',
+    'SALDO',
+    'TOTAL',
+    'AGENCIA',
+    'AGÊNCIA',
+    'CONTA',
+    'BANCO',
+    'CLIENTE',
+    'DATA',
+    'HISTORICO',
+    'HISTÓRICO',
+    'VALOR'
+  ];
+
+  return blacklist.some(term => upper.includes(term));
+}
+
+async function extractPdfLines(fileContent: ArrayBuffer): Promise<string[]> {
+  const loadingTask = pdfjsLib.getDocument({ data: fileContent });
+  const pdf = await loadingTask.promise;
+  const allLines: string[] = [];
+
+  for (let pageNum = 1; pageNum <= pdf.numPages; pageNum += 1) {
+    const page = await pdf.getPage(pageNum);
+    const textContent = await page.getTextContent();
+    const lineMap = new Map<number, { y: number; parts: { x: number; str: string }[] }>();
+
+    textContent.items.forEach((item: any) => {
+      if (!item || typeof item.str !== 'string') return;
+      const str = item.str.trim();
+      if (!str) return;
+
+      const transform = item.transform as number[];
+      const x = transform[4];
+      const y = transform[5];
+      const roundedY = Math.round(y * 2) / 2;
+      const entry = lineMap.get(roundedY) || { y: roundedY, parts: [] };
+      entry.parts.push({ x, str });
+      lineMap.set(roundedY, entry);
+    });
+
+    const pageLines = Array.from(lineMap.values())
+      .sort((a, b) => b.y - a.y)
+      .map(line =>
+        line.parts
+          .sort((a, b) => a.x - b.x)
+          .map(part => part.str)
+          .join(' ')
+      )
+      .map(normalizePdfLine)
+      .filter(Boolean);
+
+    allLines.push(...pageLines);
+  }
+
+  return allLines;
+}
+
+export async function parsePdfExtract(fileContent: ArrayBuffer, fileName: string, uploadedBy: string): Promise<BankReconciliation> {
+  const lines = await extractPdfLines(fileContent);
+  console.log('📄 PDF - Total de linhas extraídas:', lines.length);
+  console.log('📄 PDF - Primeiras 20 linhas:', lines.slice(0, 20));
+  
+  const { startDate, endDate, yearFallback } = extractPdfDateRange(lines);
+  console.log('📅 Período detectado:', { startDate, endDate, yearFallback });
+  
+  const transactions: BankTransaction[] = [];
+  let minDate = '';
+  let maxDate = '';
+  const amountRegex = /-?\d{1,3}(?:\.\d{3})*,\d{2}|-?\d+\.\d{2}/g;
+
+  lines
+    .map(normalizePdfLine)
+    .filter(line => line.length > 0)
+    .forEach((line, index) => {
+      if (shouldSkipPdfLine(line)) return;
+
+      const dateMatch = line.match(/\b\d{2}\/\d{2}\/\d{4}\b|\b\d{2}\/\d{2}\b/);
+      if (!dateMatch) return;
+
+      const rawDate = dateMatch[0];
+      let date = '';
+      if (rawDate.length === 10) {
+        const [day, month, year] = rawDate.split('/');
+        date = `${year}-${month}-${day}`;
+      } else if (yearFallback) {
+        const [day, month] = rawDate.split('/');
+        date = `${yearFallback}-${month}-${day}`;
+      }
+
+      if (!date) return;
+
+      const amountMatches = Array.from(line.matchAll(amountRegex));
+      if (amountMatches.length === 0) return;
+
+      const amountMatch = amountMatches.length > 1
+        ? amountMatches[amountMatches.length - 2]
+        : amountMatches[0];
+
+      const amount = parseBrazilianAmount(amountMatch[0]);
+      if (!Number.isFinite(amount) || amount === 0) return;
+
+      const upper = line.toUpperCase();
+      let type: 'CREDIT' | 'DEBIT' = 'CREDIT';
+      if (amountMatch[0].trim().startsWith('-')) {
+        type = 'DEBIT';
+      } else if (upper.includes('DEBITO') || upper.includes('DÉBITO') || upper.includes('PAGAMENTO') || upper.includes('SAIDA') || upper.includes('SAÍDA') || upper.includes('TARIFA') || upper.includes('PIX ENVIADO') || upper.includes('TRANSFER')) {
+        type = 'DEBIT';
+      } else if (upper.includes('CREDITO') || upper.includes('CRÉDITO') || upper.includes('RECEB') || upper.includes('ENTRADA') || upper.includes('PIX RECEBIDO')) {
+        type = 'CREDIT';
+      }
+
+      let description = line;
+      description = description.replace(rawDate, '').trim();
+      description = description.replace(amountRegex, '').trim();
+      description = description.replace(/\bC\b|\bD\b|\bCREDITO\b|\bCRÉDITO\b|\bDEBITO\b|\bDÉBITO\b/gi, '').trim();
+      description = normalizePdfLine(description);
+
+      if (!description) return;
+
+      if (!minDate || date < minDate) minDate = date;
+      if (!maxDate || date > maxDate) maxDate = date;
+
+      console.log('✅ Transação encontrada:', { date, type, amount, description: description.substring(0, 50) });
+
+      transactions.push({
+        id: `pdf-${date}-${index}-${description}`,
+        date,
+        type,
+        amount: Math.abs(amount),
+        description,
+        reference: `${index}`,
+        reconciled: false
+      });
+    });
+
+  console.log('💰 Total de transações encontradas:', transactions.length);
+
+  const credits = transactions.filter(t => t.type === 'CREDIT').reduce((sum, t) => sum + t.amount, 0);
+  const debits = transactions.filter(t => t.type === 'DEBIT').reduce((sum, t) => sum + t.amount, 0);
+
+  return {
+    id: `reconciliation-${Date.now()}`,
+    uploadedAt: new Date().toISOString(),
+    uploadedBy,
+    fileName,
+    bankName: 'Banco Inter (PDF)',
+    accountNumber: 'Desconhecida',
+    startDate: minDate || startDate || '',
+    endDate: maxDate || endDate || '',
+    initialBalance: 0,
+    finalBalance: credits - debits,
+    totalTransactions: transactions.length,
+    reconciledTransactions: 0,
+    transactions,
+    status: 'pending'
+  };
+}
+
+/**
+ * Parser universal - detecta e rota para o formato correto
+ */
+export async function parseUniversalBankExtract(
+  fileContent: string | ArrayBuffer,
+  fileName: string,
+  uploadedBy: string
+): Promise<BankReconciliation> {
+  const format = detectFileFormat(fileContent, fileName);
+  
+  console.log('🔍 Formato detectado:', format, 'para arquivo:', fileName);
+  console.log('🔍 Tipo de conteúdo:', typeof fileContent);
+  
+  switch (format) {
+    case FileFormat.CNAB:
+      if (typeof fileContent !== 'string') {
+        throw new Error('Conteudo invalido para CNAB.');
+      }
+      return parseBancoInterCNAB(fileContent, fileName, uploadedBy);
+    case FileFormat.TXT:
+      if (typeof fileContent !== 'string') {
+        throw new Error('Conteudo invalido para TXT.');
+      }
+      return parseTextExtract(fileContent, fileName, uploadedBy);
+    case FileFormat.PDF:
+      if (typeof fileContent === 'string') {
+        throw new Error('Conteudo invalido para PDF.');
+      }
+      return parsePdfExtract(fileContent, fileName, uploadedBy);
+    default:
+      // Tenta CNAB por default
+      if (typeof fileContent !== 'string') {
+        return parsePdfExtract(fileContent, fileName, uploadedBy);
+      }
+
+      try {
+        return parseBancoInterCNAB(fileContent, fileName, uploadedBy);
+      } catch {
+        return parseTextExtract(fileContent, fileName, uploadedBy);
+      }
+  }
 }
