@@ -16,9 +16,11 @@ import { BankReconciliationComponent } from './BankReconciliationComponent';
 
 import { Login } from './Login';
 import { auth, db, isMockMode } from './firebase';
-import { Bill, Supplier, BillStatus, UserRole, TeamMember, Company, ChartOfAccount, Revenue } from './types';
-import { collection, doc, onSnapshot, setDoc, deleteDoc, updateDoc, writeBatch } from 'firebase/firestore';
+import { Bill, Supplier, BillStatus, UserRole, TeamMember, Company, ChartOfAccount, Revenue, RecurrenceType } from './types';
+import { collection, doc, onSnapshot, setDoc, deleteDoc, updateDoc, writeBatch, getDocs, getDoc } from 'firebase/firestore';
 import { Loader2 } from 'lucide-react';
+
+const SHARED_WORKSPACE_ID = 'paga-ai2-shared';
 
 const App: React.FC = () => {
   const [user, setUser] = useState<any>(null);
@@ -46,6 +48,13 @@ const App: React.FC = () => {
   const seededImportedBillsRef = useRef(false);
   const currentYear = new Date().getFullYear();
   const currentMonth = new Date().getMonth();
+
+  const getSharedBillsRef = () => collection(db, 'workspaces', SHARED_WORKSPACE_ID, 'bills');
+  const getSharedSuppliersRef = () => collection(db, 'workspaces', SHARED_WORKSPACE_ID, 'suppliers');
+  const getSharedAccountsRef = () => collection(db, 'workspaces', SHARED_WORKSPACE_ID, 'accounts');
+  const getSharedRevenuesRef = () => collection(db, 'workspaces', SHARED_WORKSPACE_ID, 'revenues');
+  const getSharedTeamRef = () => collection(db, 'workspaces', SHARED_WORKSPACE_ID, 'team');
+  const getSharedCompanyRef = () => doc(db, 'workspaces', SHARED_WORKSPACE_ID, 'meta', 'company');
 
   // Validar integridade das contas: PAID sem paidDate devem ser PENDING
   const validateBills = (billsToValidate: Bill[]): Bill[] => {
@@ -136,11 +145,35 @@ const App: React.FC = () => {
     const generated: Bill[] = [];
 
     baseBills.forEach((bill) => {
-      if (bill.recurrenceType !== 'monthly') return;
+      const isMonthly = bill.recurrenceType === 'monthly';
+      const isAnnual = bill.recurrenceType === 'annual';
+      if (!isMonthly && !isAnnual) return;
 
       // Extrair dia da data base sem timezone issues
-      const [, , dayStr] = bill.dueDate.split('-');
-      const baseDay = Number(dayStr) || 1;
+      const [baseYearStr, baseMonthStr, baseDayStr] = bill.dueDate.split('-');
+      const baseYear = Number(baseYearStr) || year;
+      const baseMonthIndex = Math.max(0, Math.min(11, (Number(baseMonthStr) || 1) - 1));
+      const baseDay = Number(baseDayStr) || 1;
+
+      if (isAnnual) {
+        const newId = `${bill.id}-${year}`;
+        if (existingIds.has(newId)) return;
+        if (baseYear === year && existingIds.has(bill.id)) return;
+
+        const clampedDay = getClampedDay(year, baseMonthIndex, baseDay);
+        const monthKey = String(baseMonthIndex + 1).padStart(2, '0');
+        const dayKey = String(clampedDay).padStart(2, '0');
+        const dueDate = `${year}-${monthKey}-${dayKey}`;
+
+        generated.push({
+          ...bill,
+          id: newId,
+          parentId: bill.id,
+          dueDate,
+          status: BillStatus.PENDING,
+        });
+        return;
+      }
 
       // Gerar para TODOS OS MESES DO ANO (0 a 11), não apenas a partir do mês atual
       for (let month = 0; month < 12; month += 1) {
@@ -171,6 +204,12 @@ const App: React.FC = () => {
     const existingIds = new Set(existing.map((b) => b.id));
     const added = buildRecurringBillsForYear(defaultRecurringBills, currentYear, currentMonth, existingIds);
     return { merged: [...existing, ...added], added };
+  };
+
+  const appendMissingBillsById = (existing: Bill[], candidates: Bill[]) => {
+    const existingIds = new Set(existing.map((b) => b.id));
+    const missing = candidates.filter((b) => !existingIds.has(b.id));
+    return { merged: [...existing, ...missing], missing };
   };
 
   const loadImportedBills = async (existing: Bill[]) => {
@@ -417,9 +456,13 @@ const App: React.FC = () => {
             const parsedBills = JSON.parse(savedBills);
             let nextBills = parsedBills;
 
-            if (!seededPaidBillsRef.current && !parsedBills.some((b: Bill) => b.id.startsWith('paid-20026'))) {
+            if (!seededPaidBillsRef.current) {
+              const { merged: mergedWithPaid, missing } = appendMissingBillsById(parsedBills, defaultPaidBills);
               seededPaidBillsRef.current = true;
-              nextBills = [...parsedBills, ...defaultPaidBills];
+              nextBills = mergedWithPaid;
+              if (missing.length > 0) {
+                console.log(`✅ ${missing.length} contas pagas padrão adicionadas (modo local)`);
+              }
             }
 
             seededRecurringBillsRef.current = true;
@@ -486,6 +529,105 @@ const App: React.FC = () => {
 
   useEffect(() => {
     if (isMockMode || !user) return;
+    let cancelled = false;
+
+    const migrateLegacyUserDataIfNeeded = async () => {
+      try {
+        const billsRef = getSharedBillsRef();
+        const suppliersRef = getSharedSuppliersRef();
+        const accountsRef = getSharedAccountsRef();
+        const revenuesRef = getSharedRevenuesRef();
+        const teamRef = getSharedTeamRef();
+        const companyRef = getSharedCompanyRef();
+
+        const [
+          sharedBillsSnap,
+          sharedSuppliersSnap,
+          sharedAccountsSnap,
+          sharedRevenuesSnap,
+          sharedTeamSnap,
+          sharedCompanySnap,
+        ] = await Promise.all([
+          getDocs(billsRef),
+          getDocs(suppliersRef),
+          getDocs(accountsRef),
+          getDocs(revenuesRef),
+          getDocs(teamRef),
+          getDoc(companyRef),
+        ]);
+
+        if (cancelled) return;
+
+        const hasSharedData =
+          !sharedBillsSnap.empty ||
+          !sharedSuppliersSnap.empty ||
+          !sharedAccountsSnap.empty ||
+          !sharedRevenuesSnap.empty ||
+          !sharedTeamSnap.empty ||
+          sharedCompanySnap.exists();
+
+        if (hasSharedData) return;
+
+        const legacyBillsRef = collection(db, 'users', user.uid, 'bills');
+        const legacySuppliersRef = collection(db, 'users', user.uid, 'suppliers');
+        const legacyAccountsRef = collection(db, 'users', user.uid, 'accounts');
+        const legacyRevenuesRef = collection(db, 'users', user.uid, 'revenues');
+        const legacyTeamRef = collection(db, 'users', user.uid, 'team');
+        const legacyCompanyRef = doc(db, 'users', user.uid, 'meta', 'company');
+
+        const [
+          legacyBillsSnap,
+          legacySuppliersSnap,
+          legacyAccountsSnap,
+          legacyRevenuesSnap,
+          legacyTeamSnap,
+          legacyCompanySnap,
+        ] = await Promise.all([
+          getDocs(legacyBillsRef),
+          getDocs(legacySuppliersRef),
+          getDocs(legacyAccountsRef),
+          getDocs(legacyRevenuesRef),
+          getDocs(legacyTeamRef),
+          getDoc(legacyCompanyRef),
+        ]);
+
+        if (cancelled) return;
+
+        const hasLegacyData =
+          !legacyBillsSnap.empty ||
+          !legacySuppliersSnap.empty ||
+          !legacyAccountsSnap.empty ||
+          !legacyRevenuesSnap.empty ||
+          !legacyTeamSnap.empty ||
+          legacyCompanySnap.exists();
+
+        if (!hasLegacyData) return;
+
+        const batch = writeBatch(db);
+        legacyBillsSnap.docs.forEach((d) => batch.set(doc(billsRef, d.id), d.data()));
+        legacySuppliersSnap.docs.forEach((d) => batch.set(doc(suppliersRef, d.id), d.data()));
+        legacyAccountsSnap.docs.forEach((d) => batch.set(doc(accountsRef, d.id), d.data()));
+        legacyRevenuesSnap.docs.forEach((d) => batch.set(doc(revenuesRef, d.id), d.data()));
+        legacyTeamSnap.docs.forEach((d) => batch.set(doc(teamRef, d.id), d.data()));
+        if (legacyCompanySnap.exists()) {
+          batch.set(companyRef, legacyCompanySnap.data());
+        }
+        await batch.commit();
+        console.log('✅ Dados migrados para workspace compartilhado');
+      } catch (e) {
+        console.error('Erro ao migrar dados para workspace compartilhado:', e);
+      }
+    };
+
+    void migrateLegacyUserDataIfNeeded();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isMockMode, user]);
+
+  useEffect(() => {
+    if (isMockMode || !user) return;
     let didSetLoading = false;
     const markLoaded = () => {
       if (!didSetLoading) {
@@ -494,12 +636,12 @@ const App: React.FC = () => {
       }
     };
 
-    const billsRef = collection(db, 'users', user.uid, 'bills');
-    const suppliersRef = collection(db, 'users', user.uid, 'suppliers');
-    const accountsRef = collection(db, 'users', user.uid, 'accounts');
-    const revenuesRef = collection(db, 'users', user.uid, 'revenues');
-    const teamRef = collection(db, 'users', user.uid, 'team');
-    const companyRef = doc(db, 'users', user.uid, 'meta', 'company');
+    const billsRef = getSharedBillsRef();
+    const suppliersRef = getSharedSuppliersRef();
+    const accountsRef = getSharedAccountsRef();
+    const revenuesRef = getSharedRevenuesRef();
+    const teamRef = getSharedTeamRef();
+    const companyRef = getSharedCompanyRef();
 
     const unsubBills = onSnapshot(billsRef, (snap) => {
       if (snap.empty && !seededRecurringBillsRef.current) {
@@ -518,14 +660,17 @@ const App: React.FC = () => {
       const next = snap.docs.map((d) => ({ id: d.id, ...(d.data() as Omit<Bill, 'id'>) }));
 
       let nextBills = next;
-      if (!seededPaidBillsRef.current && !next.some((b) => b.id.startsWith('paid-20026'))) {
+      if (!seededPaidBillsRef.current) {
         seededPaidBillsRef.current = true;
-        const batch = writeBatch(db);
-        defaultPaidBills.forEach((bill) => {
-          batch.set(doc(billsRef, bill.id), bill);
-        });
-        batch.commit().catch((e) => console.error('Erro ao criar contas pagas:', e));
-        nextBills = [...next, ...defaultPaidBills];
+        const { merged: mergedWithPaid, missing } = appendMissingBillsById(next, defaultPaidBills);
+        if (missing.length > 0) {
+          const batch = writeBatch(db);
+          missing.forEach((bill) => {
+            batch.set(doc(billsRef, bill.id), bill);
+          });
+          batch.commit().catch((e) => console.error('Erro ao criar contas pagas:', e));
+        }
+        nextBills = mergedWithPaid;
       }
 
       seededRecurringBillsRef.current = true;
@@ -609,7 +754,7 @@ const App: React.FC = () => {
 
   const persistAccounts = async (prev: ChartOfAccount[], next: ChartOfAccount[]) => {
     if (isMockMode || !user) return;
-    const accountsRef = collection(db, 'users', user.uid, 'accounts');
+    const accountsRef = getSharedAccountsRef();
     const batch = writeBatch(db);
     const nextIds = new Set(next.map((a) => a.id));
     prev.forEach((a) => {
@@ -621,7 +766,7 @@ const App: React.FC = () => {
 
   const persistTeam = async (prev: TeamMember[], next: TeamMember[]) => {
     if (isMockMode || !user) return;
-    const teamRef = collection(db, 'users', user.uid, 'team');
+    const teamRef = getSharedTeamRef();
     const batch = writeBatch(db);
     const nextIds = new Set(next.map((m) => m.id));
     prev.forEach((m) => {
@@ -633,7 +778,7 @@ const App: React.FC = () => {
 
   const persistRevenues = async (prev: Revenue[], next: Revenue[]) => {
     if (isMockMode || !user) return;
-    const revenuesRef = collection(db, 'users', user.uid, 'revenues');
+    const revenuesRef = getSharedRevenuesRef();
     const batch = writeBatch(db);
     const nextIds = new Set(next.map((r) => r.id));
     prev.forEach((r) => {
@@ -675,7 +820,7 @@ const App: React.FC = () => {
   const setCompanyWithPersist = (next: Company) => {
     setCompany(next);
     if (isMockMode || !user) return;
-    const companyRef = doc(db, 'users', user.uid, 'meta', 'company');
+    const companyRef = getSharedCompanyRef();
     setDoc(companyRef, next, { merge: true }).catch((e) => console.error('Erro ao salvar empresa:', e));
   };
 
@@ -688,7 +833,7 @@ const App: React.FC = () => {
 
   const saveBill = async (bill: Bill): Promise<boolean> => {
     if (isMockMode || !user) return false;
-    const billsRef = collection(db, 'users', user.uid, 'bills');
+    const billsRef = getSharedBillsRef();
     try {
       const payload = stripUndefined(bill);
       await setDoc(doc(billsRef, bill.id), payload, { merge: true });
@@ -702,7 +847,7 @@ const App: React.FC = () => {
 
   const saveSupplier = async (supplier: Supplier) => {
     if (isMockMode || !user) return;
-    const suppliersRef = collection(db, 'users', user.uid, 'suppliers');
+    const suppliersRef = getSharedSuppliersRef();
     try {
       await setDoc(doc(suppliersRef, supplier.id), supplier, { merge: true });
       console.log('✅ Fornecedor salvo no Firebase:', supplier);
@@ -714,8 +859,9 @@ const App: React.FC = () => {
   const handleBillSubmit = async (bill: Bill) => {
     const nextBill: Bill = { ...bill, id: bill.id || editingBill?.id || Math.random().toString(36).slice(2, 10) };
     const isNewBill = !editingBill;
-    const wasNotRecurring = editingBill && editingBill.recurrenceType !== 'monthly';
-    const isNowRecurring = nextBill.recurrenceType === 'monthly';
+    const isRecurringType = (value?: RecurrenceType) => value === 'monthly' || value === 'annual';
+    const wasNotRecurring = editingBill && !isRecurringType(editingBill.recurrenceType);
+    const isNowRecurring = isRecurringType(nextBill.recurrenceType);
     
     if (isMockMode) {
       setBills((prev) => {
@@ -750,7 +896,7 @@ const App: React.FC = () => {
         const generated = buildRecurringBillsForYear([nextBill], currentYear, 0, existingIds);
         
         if (generated.length > 0 && user) {
-          const billsRef = collection(db, 'users', user.uid, 'bills');
+          const billsRef = getSharedBillsRef();
           const batch = writeBatch(db);
           generated.forEach((generatedBill) => {
             const payload = stripUndefined(generatedBill);
@@ -785,7 +931,7 @@ const App: React.FC = () => {
       return;
     }
     if (!user) return;
-    const billsRef = collection(db, 'users', user.uid, 'bills');
+    const billsRef = getSharedBillsRef();
     await deleteDoc(doc(billsRef, id));
   };
 
@@ -795,7 +941,7 @@ const App: React.FC = () => {
       return;
     }
     if (!user) return;
-    const suppliersRef = collection(db, 'users', user.uid, 'suppliers');
+    const suppliersRef = getSharedSuppliersRef();
     await deleteDoc(doc(suppliersRef, id));
   };
 
@@ -805,7 +951,7 @@ const App: React.FC = () => {
       return;
     }
     if (!user) return;
-    const billsRef = collection(db, 'users', user.uid, 'bills');
+    const billsRef = getSharedBillsRef();
     await updateDoc(doc(billsRef, id), { status });
   };
 
@@ -820,7 +966,7 @@ const App: React.FC = () => {
       return;
     }
     if (!user) return;
-    const billsRef = collection(db, 'users', user.uid, 'bills');
+    const billsRef = getSharedBillsRef();
     await updateDoc(doc(billsRef, id), { isEstimate: newIsEstimate });
   };
 
@@ -832,7 +978,7 @@ const App: React.FC = () => {
     
     if (isMockMode) return;
     if (!user) return;
-    const revenuesRef = collection(db, 'users', user.uid, 'revenues');
+    const revenuesRef = getSharedRevenuesRef();
     await setDoc(doc(revenuesRef, id), newRevenue);
   };
 
@@ -841,7 +987,7 @@ const App: React.FC = () => {
     
     if (isMockMode) return;
     if (!user) return;
-    const revenuesRef = collection(db, 'users', user.uid, 'revenues');
+    const revenuesRef = getSharedRevenuesRef();
     await updateDoc(doc(revenuesRef, id), revenue);
   };
 
@@ -851,7 +997,7 @@ const App: React.FC = () => {
       return;
     }
     if (!user) return;
-    const revenuesRef = collection(db, 'users', user.uid, 'revenues');
+    const revenuesRef = getSharedRevenuesRef();
     await deleteDoc(doc(revenuesRef, id));
   };
 

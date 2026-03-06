@@ -5,7 +5,7 @@ export enum BillStatus {
   OVERDUE = 'Atrasado'
 }
 
-export type RecurrenceType = 'none' | 'monthly' | 'installments' | 'custom' | 'specific';
+export type RecurrenceType = 'none' | 'monthly' | 'annual' | 'installments' | 'custom' | 'specific';
 
 export enum UserRole {
   ADMIN = 'ADMIN',

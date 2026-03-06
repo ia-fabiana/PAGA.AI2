@@ -14,7 +14,25 @@ interface BillFormProps {
 }
 
 export const BillForm: React.FC<BillFormProps> = ({ suppliers, accounts, onClose, onSubmit, initialData, userEmail, canEditBillDate }) => {
-  const [formData, setFormData] = useState<Partial<Bill>>(initialData || {
+  const formatCurrencyInput = (value?: number) => {
+    if (value === undefined) return '';
+    return new Intl.NumberFormat('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(value);
+  };
+
+  const parseCurrencyInput = (value: string) => {
+    const normalized = value.replace(/\./g, '').replace(',', '.');
+    const parsed = Number(normalized);
+    return Number.isNaN(parsed) ? 0 : parsed;
+  };
+
+  const initialSpecificDues = initialData?.specificDues || [{ date: new Date().toISOString().split('T')[0], amount: 0 }];
+  const initialSpecificDuesInput = initialSpecificDues.map((due) => (due.amount ? formatCurrencyInput(due.amount) : ''));
+
+  const baseFormData: Partial<Bill> & {
+    amountInput?: string;
+    paidAmountInput?: string;
+    specificDuesInput?: string[];
+  } = {
     description: '',
     amount: 0,
     supplierId: suppliers[0]?.id || '',
@@ -27,8 +45,24 @@ export const BillForm: React.FC<BillFormProps> = ({ suppliers, accounts, onClose
     accountId: accounts[0]?.id || '',
     totalInstallments: 1,
     selectedMonths: [],
-    specificDues: [{ date: new Date().toISOString().split('T')[0], amount: 0 }],
+    specificDues: initialSpecificDues,
+    specificDuesInput: initialSpecificDuesInput,
+    amountInput: initialData?.amount ? formatCurrencyInput(initialData.amount) : '',
+    paidAmountInput: initialData?.paidAmount ? formatCurrencyInput(initialData.paidAmount) : '',
     launchedBy: initialData?.launchedBy || userEmail || ''
+  };
+
+  const [formData, setFormData] = useState<Partial<Bill> & {
+    amountInput?: string;
+    paidAmountInput?: string;
+    specificDuesInput?: string[];
+  }>({
+    ...baseFormData,
+    ...initialData,
+    specificDues: initialSpecificDues,
+    specificDuesInput: initialSpecificDuesInput,
+    amountInput: initialData?.amount ? formatCurrencyInput(initialData.amount) : baseFormData.amountInput,
+    paidAmountInput: initialData?.paidAmount ? formatCurrencyInput(initialData.paidAmount) : baseFormData.paidAmountInput
   });
 
   const months = [
@@ -47,34 +81,41 @@ export const BillForm: React.FC<BillFormProps> = ({ suppliers, accounts, onClose
 
   const addSpecificDue = () => {
     const current = formData.specificDues || [];
+    const inputs = formData.specificDuesInput || [];
     setFormData({
       ...formData,
-      specificDues: [...current, { date: new Date().toISOString().split('T')[0], amount: 0 }]
+      specificDues: [...current, { date: new Date().toISOString().split('T')[0], amount: 0 }],
+      specificDuesInput: [...inputs, '']
     });
   };
 
   const removeSpecificDue = (index: number) => {
     const current = formData.specificDues || [];
+    const inputs = formData.specificDuesInput || [];
     if (current.length <= 1) return;
     setFormData({
       ...formData,
-      specificDues: current.filter((_, i) => i !== index)
+      specificDues: current.filter((_, i) => i !== index),
+      specificDuesInput: inputs.filter((_, i) => i !== index)
     });
   };
 
   const updateSpecificDue = (index: number, field: 'date' | 'amount', value: string | number) => {
     const current = formData.specificDues || [];
+    const inputs = formData.specificDuesInput || [];
+    if (field === 'amount') {
+      const raw = String(value);
+      const updated = current.map((item, i) => (i === index ? { ...item, amount: parseCurrencyInput(raw) } : item));
+      const nextInputs = inputs.map((item, i) => (i === index ? raw : item));
+      setFormData({ ...formData, specificDues: updated, specificDuesInput: nextInputs });
+      return;
+    }
+
     const updated = current.map((item, i) => {
-      if (i === index) return { ...item, [field]: value };
+      if (i === index) return { ...item, date: String(value) };
       return item;
     });
     setFormData({ ...formData, specificDues: updated });
-  };
-
-  const parseCurrencyInput = (value: string) => {
-    const normalized = value.replace(/\./g, '').replace(',', '.');
-    const parsed = Number(normalized);
-    return Number.isNaN(parsed) ? 0 : parsed;
   };
 
   const handleSubmit = (e?: React.SyntheticEvent) => {
@@ -227,6 +268,29 @@ export const BillForm: React.FC<BillFormProps> = ({ suppliers, accounts, onClose
                 <div className="flex-1 text-sm font-bold text-slate-800">Recorrência Mensal Fixa</div>
                 <Repeat size={16} className="text-indigo-500" />
               </label>
+
+              <label className={`flex items-center gap-3 p-3 rounded-xl border-2 transition-all cursor-pointer ${formData.recurrenceType === 'annual' ? 'bg-white border-indigo-500 shadow-sm' : 'bg-slate-100/50 border-transparent hover:border-slate-300'}`}>
+                <input
+                  type="radio"
+                  name="recurrence"
+                  className="hidden"
+                  onChange={() => setFormData({
+                    ...formData,
+                    recurrenceType: 'annual',
+                    totalInstallments: 1,
+                    status: BillStatus.PENDING,
+                    paidDate: undefined,
+                    paidAmount: undefined,
+                    interestAmount: undefined
+                  })}
+                  checked={formData.recurrenceType === 'annual'}
+                />
+                <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center ${formData.recurrenceType === 'annual' ? 'border-indigo-500' : 'border-slate-300'}`}>
+                  {formData.recurrenceType === 'annual' && <div className="w-2 h-2 rounded-full bg-indigo-500"></div>}
+                </div>
+                <div className="flex-1 text-sm font-bold text-slate-800">Recorrência Anual</div>
+                <Repeat size={16} className="text-indigo-500" />
+              </label>
             </div>
 
             {formData.recurrenceType !== 'specific' && (
@@ -270,8 +334,11 @@ export const BillForm: React.FC<BillFormProps> = ({ suppliers, accounts, onClose
                           type="text" 
                           inputMode="decimal"
                           className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none"
-                          value={formData.amount}
-                          onChange={e => setFormData({ ...formData, amount: parseCurrencyInput(e.target.value) })}
+                          value={formData.amountInput ?? (formData.amount ? formatCurrencyInput(formData.amount) : '')}
+                          onChange={e => {
+                            const raw = e.target.value;
+                            setFormData({ ...formData, amountInput: raw, amount: parseCurrencyInput(raw) });
+                          }}
                           placeholder="0,00"
                         />
                       </div>
@@ -321,8 +388,11 @@ export const BillForm: React.FC<BillFormProps> = ({ suppliers, accounts, onClose
                       </label>
                       <input 
                         type="text" inputMode="decimal" className="w-full px-4 py-2 bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none"
-                        value={formData.amount}
-                        onChange={e => setFormData({ ...formData, amount: parseCurrencyInput(e.target.value) })}
+                        value={formData.amountInput ?? (formData.amount ? formatCurrencyInput(formData.amount) : '')}
+                        onChange={e => {
+                          const raw = e.target.value;
+                          setFormData({ ...formData, amountInput: raw, amount: parseCurrencyInput(raw) });
+                        }}
                       />
                     </div>
                     <div>
@@ -374,8 +444,8 @@ export const BillForm: React.FC<BillFormProps> = ({ suppliers, accounts, onClose
                         <label className="text-xs font-bold text-slate-400 uppercase">Valor</label>
                         <input 
                           type="text" inputMode="decimal" className="w-full text-sm outline-none bg-transparent font-bold text-indigo-700"
-                          value={due.amount}
-                          onChange={e => updateSpecificDue(idx, 'amount', parseCurrencyInput(e.target.value))}
+                          value={formData.specificDuesInput?.[idx] ?? (due.amount ? formatCurrencyInput(due.amount) : '')}
+                          onChange={e => updateSpecificDue(idx, 'amount', e.target.value)}
                         />
                       </div>
                       <button 
@@ -460,12 +530,12 @@ export const BillForm: React.FC<BillFormProps> = ({ suppliers, accounts, onClose
                     type="text" 
                     inputMode="decimal"
                     className="w-full px-4 py-2 bg-white border border-emerald-200 rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none"
-                    value={formData.paidAmount ?? ''}
+                    value={formData.paidAmountInput ?? (formData.paidAmount !== undefined ? formatCurrencyInput(formData.paidAmount) : '')}
                     onChange={e => {
                       const raw = e.target.value.trim();
                       const paidAmount = raw ? parseCurrencyInput(raw) : undefined;
                       const interestAmount = paidAmount !== undefined && formData.amount ? paidAmount - formData.amount : undefined;
-                      setFormData({ ...formData, paidAmount, interestAmount });
+                      setFormData({ ...formData, paidAmountInput: raw, paidAmount, interestAmount });
                     }}
                     placeholder={formData.amount ? new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(formData.amount) : '0,00'}
                   />

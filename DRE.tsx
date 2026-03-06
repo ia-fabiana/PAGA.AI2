@@ -552,12 +552,15 @@ export const DRE: React.FC<DREProps> = ({ bills, revenues, accounts, setRevenues
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         <div className="bg-white p-8 rounded-[2rem] border-2 border-slate-100 shadow-lg">
-          <p className="text-xs font-black text-slate-400 uppercase tracking-[0.2em] mb-2">Ponto de Equilíbrio</p>
-          <h4 className="text-3xl font-black text-indigo-600">
+           <p className="text-xs font-black text-slate-400 uppercase tracking-[0.2em] mb-2">Ponto de Equilíbrio</p>
+           <h4 className="text-3xl font-black text-indigo-600">
              {fmt((dreData[selectedMonthIndex]?.fixedExpenses || 0) + (dreData[selectedMonthIndex]?.fixedSalary || 0) + (dreData[selectedMonthIndex]?.proLabore || 0))}
-          </h4>
-          <p className="text-xs text-slate-500 font-bold uppercase mt-2">{months[selectedMonthIndex]} (mes selecionado)</p>
-          <p className="text-xs text-slate-400 font-bold uppercase mt-3">Ano: {fmt(dreData.reduce((acc, d) => acc + d.fixedExpenses + d.fixedSalary + d.proLabore, 0) / 12)}</p>
+           </h4>
+           <p className="text-xs text-slate-500 font-bold uppercase mt-2">{months[selectedMonthIndex]} (mes selecionado)</p>
+           <p className="text-xs text-slate-400 font-bold uppercase mt-3">Ano: {fmt(dreData.reduce((acc, d) => acc + d.fixedExpenses + d.fixedSalary + d.proLabore, 0) / 12)}</p>
+           <p className="text-xs text-slate-400 mt-4">
+            <span className="font-bold">Como é calculado?</span> O ponto de equilíbrio é a soma das despesas fixas, salários fixos e pro labore do mês. Esse valor mostra quanto a empresa precisa faturar para cobrir seus custos fixos, sem considerar despesas variáveis ou receitas extras.
+           </p>
         </div>
         <div className="bg-white p-8 rounded-[2rem] border-2 border-slate-100 shadow-lg">
           <p className="text-xs font-black text-slate-400 uppercase tracking-[0.2em] mb-2">Margem de Contribuição</p>
