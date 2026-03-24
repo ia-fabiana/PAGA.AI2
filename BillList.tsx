@@ -1,11 +1,11 @@
-
-import React, { useState, useMemo } from 'react';
-import { Bill, Supplier, BillStatus, UserRole, ChartOfAccount } from './types';
-import { Search, Plus, FileDown, Edit2, Trash2, Repeat, Calendar, ListTree, User, AlertCircle, Upload, CheckCircle } from 'lucide-react';
+import React, { useMemo, useState } from 'react';
+import { Bill, BillStatus, ChartOfAccount, Supplier, UserRole } from './types';
+import { AlertCircle, Edit2, FileDown, ListTree, Plus, Repeat, Search, Trash2, User } from 'lucide-react';
 import { jsPDF } from 'jspdf';
 import 'jspdf-autotable';
 import { theme } from './theme';
-import { parseUniversalBankExtract, matchDebitWithBills } from './cnabParser';
+import { getBillDisplayInterestAmount, getBillDisplayPaidAmount, getBillDisplayPaidDate, getBillOutstandingAmount, getBillPaymentSource, isBillFullyPaid, isBillPartiallyPaid } from './billPaymentUtils';
+import { formatBoletoCode, getBoletoBarcodeDataUrl } from './boletoUtils';
 
 interface BillListProps {
   bills: Bill[];
@@ -14,288 +14,409 @@ interface BillListProps {
   onEdit: (bill: Bill) => void;
   onDelete: (id: string) => void;
   onStatusChange: (id: string, status: BillStatus) => void;
+  onUpdate: (bill: Bill) => void;
+  onReopenReconciliation: (bill: Bill) => Promise<void> | void;
   onOpenForm: () => void;
   onToggleEstimate: (id: string) => void;
   userRole: UserRole;
   companyName?: string;
 }
 
-export const BillList: React.FC<BillListProps> = ({ bills, suppliers, accounts, onEdit, onDelete, onStatusChange, onOpenForm, onToggleEstimate, userRole, companyName = 'PAGA.AI' }) => {
-  const [showReconcileModal, setShowReconcileModal] = useState(false);
-  const [reconcileMatches, setReconcileMatches] = useState<any>({});
-  const [unmatchedTransactions, setUnmatchedTransactions] = useState<any[]>([]);
-  const [isReconciling, setIsReconciling] = useState(false);
+export const BillList: React.FC<BillListProps> = ({
+  bills,
+  suppliers,
+  accounts,
+  onEdit,
+  onDelete,
+  onStatusChange,
+  onUpdate,
+  onReopenReconciliation,
+  onOpenForm,
+  onToggleEstimate,
+  userRole,
+  companyName = 'PAGA.AI',
+}) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('OPEN');
   const [supplierFilter, setSupplierFilter] = useState('ALL');
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
+  const [draftSearchTerm, setDraftSearchTerm] = useState('');
+  const [draftStatusFilter, setDraftStatusFilter] = useState('OPEN');
+  const [draftSupplierFilter, setDraftSupplierFilter] = useState('ALL');
+  const [draftStartDate, setDraftStartDate] = useState('');
+  const [draftEndDate, setDraftEndDate] = useState('');
   const [showPdfPreview, setShowPdfPreview] = useState(false);
   const [pdfPreviewUrl, setPdfPreviewUrl] = useState('');
-  const [sortBy, setSortBy] = useState<'dueDate' | 'paidDate' | 'amount' | 'supplier'>('dueDate'); // Ordenação
+  const [sortBy, setSortBy] = useState<'dueDate' | 'paidDate' | 'amount' | 'supplier'>('dueDate');
+  const [paidAmountInputs, setPaidAmountInputs] = useState<Record<string, string>>({});
 
-  // Funções auxiliares para parsing de datas (sem timezone issues)
-  const formatDatePtBR = (dateStr: string): string => {
+  const formatDatePtBR = (dateStr?: string): string => {
+    if (!dateStr || !/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) return '—';
     const [year, month, day] = dateStr.split('-');
     return `${day}/${month}/${year}`;
   };
 
-  const handleReconcileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
-    setIsReconciling(true);
-    try {
-      const isPdf = file.name.toLowerCase().endsWith('.pdf');
-      const fileContent = isPdf ? await file.arrayBuffer() : await file.text();
-      const reconciliation = await parseUniversalBankExtract(fileContent, file.name, 'user');
-      const paidBills = bills.filter(b => b.status === BillStatus.PAID);
-      const debits = reconciliation.transactions.filter(t => t.type === 'DEBIT');
-      const matches: any = {};
-      const unmatched: any[] = [];
-      debits.forEach(debit => {
-        const billMatches = matchDebitWithBills(debit, paidBills);
-        if (billMatches.length > 0) {
-          const best = billMatches[0];
-          matches[best.billId] = { matched: true, bankAmount: debit.amount, bankDate: debit.date, confidence: best.score };
-        } else {
-          unmatched.push({ date: debit.date, amount: debit.amount, description: debit.description });
-        }
-      });
-      setReconcileMatches(matches);
-      setUnmatchedTransactions(unmatched);
-      setShowReconcileModal(true);
-    } catch (error) {
-      console.error('Reconciliation error:', error);
-      alert('Erro ao processar: ' + (error instanceof Error ? error.message : 'Erro'));
-    } finally {
-      setIsReconciling(false);
-    }
-  };
-
-  const getDateParts = (dateStr: string) => {
-    const [yearStr, monthStr, dayStr] = dateStr.split('-');
+  const parseLocalDate = (value: string, endOfDay = false) => {
+    const [yearStr, monthStr, dayStr] = value.split('-');
     const year = Number(yearStr);
     const month = Number(monthStr);
     const day = Number(dayStr);
     if (!year || !month || !day) return null;
-    return { year, month, day };
+    return endOfDay
+      ? new Date(year, month - 1, day, 23, 59, 59, 999)
+      : new Date(year, month - 1, day, 0, 0, 0, 0);
   };
 
+  const formatCurrency = (value?: number) =>
+    value === undefined
+      ? '—'
+      : new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value);
 
-  // Helper functions to detect overdue status dynamically
+  const formatCurrencyInput = (value?: number) => {
+    if (value === undefined) return '';
+    return new Intl.NumberFormat('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(value);
+  };
+
+  const parseCurrencyInput = (value: string): number | undefined => {
+    const trimmed = value.trim();
+    if (!trimmed) return undefined;
+    const normalized = trimmed.replace(/\./g, '').replace(',', '.');
+    const parsed = Number(normalized);
+    return Number.isFinite(parsed) ? parsed : undefined;
+  };
+
+  const isBankPayment = (bill: Bill) => getBillPaymentSource(bill) === 'bank';
+
   const toDate = (dateStr: string) => new Date(`${dateStr}T12:00:00`);
-  const isPaid = (bill: Bill) => bill.status === BillStatus.PAID || Boolean(bill.paidDate);
+  const isPaid = (bill: Bill) => isBillFullyPaid(bill);
   const isOverdue = (bill: Bill) => {
     const today = new Date();
     today.setHours(12, 0, 0, 0);
     return !isPaid(bill) && toDate(bill.dueDate) < today;
   };
 
+  const getComputedStatus = (bill: Bill): BillStatus => {
+    if (isPaid(bill)) return BillStatus.PAID;
+    if (isOverdue(bill)) return BillStatus.OVERDUE;
+    return BillStatus.PENDING;
+  };
+
+  const applyFilters = () => {
+    setSearchTerm(draftSearchTerm);
+    setStatusFilter(draftStatusFilter);
+    setSupplierFilter(draftSupplierFilter);
+    setStartDate(draftStartDate);
+    setEndDate(draftEndDate);
+  };
+
+  const clearFilters = () => {
+    setDraftSearchTerm('');
+    setDraftStatusFilter('OPEN');
+    setDraftSupplierFilter('ALL');
+    setDraftStartDate('');
+    setDraftEndDate('');
+    setSearchTerm('');
+    setStatusFilter('OPEN');
+    setSupplierFilter('ALL');
+    setStartDate('');
+    setEndDate('');
+  };
+
   const filteredBills = useMemo(() => {
-    const filtered = bills.filter(bill => {
-      const supplier = suppliers.find(s => s.id === bill.supplierId);
-      const account = accounts.find(a => a.id === bill.accountId);
-      
-      const matchesSearch = 
-        bill.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        supplier?.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        account?.name.toLowerCase().includes(searchTerm.toLowerCase());
-      
+    const filtered = bills.filter((bill) => {
+      const supplier = suppliers.find((item) => item.id === bill.supplierId);
+      const account = accounts.find((item) => item.id === bill.accountId);
+      const normalizedSearch = searchTerm.toLowerCase();
+      const matchesSearch =
+        bill.description.toLowerCase().includes(normalizedSearch) ||
+        supplier?.name.toLowerCase().includes(normalizedSearch) ||
+        account?.name.toLowerCase().includes(normalizedSearch);
+
+      const computedStatus = getComputedStatus(bill);
       const matchesStatus =
         statusFilter === 'ALL' ||
-        (statusFilter === 'OPEN' && bill.status !== BillStatus.PAID) ||
-        (statusFilter === 'OPEN_NOT_OVERDUE' && bill.status === BillStatus.PENDING && !isOverdue(bill)) ||
-        (statusFilter === BillStatus.OVERDUE && isOverdue(bill)) ||
-        bill.status === statusFilter;
+        (statusFilter === 'OPEN' && computedStatus !== BillStatus.PAID) ||
+        (statusFilter === 'OPEN_NOT_OVERDUE' && computedStatus === BillStatus.PENDING) ||
+        computedStatus === statusFilter;
       const matchesSupplier = supplierFilter === 'ALL' || bill.supplierId === supplierFilter;
-      
-      const billDate = new Date(bill.dueDate);
-      const matchesDate = 
-        (!startDate || billDate >= new Date(startDate)) &&
-        (!endDate || billDate <= new Date(endDate));
+
+      const isPaidFilter = statusFilter === BillStatus.PAID;
+      const displayPaidDateStr = getBillDisplayPaidDate(bill);
+      let matchesDate = true;
+      if (startDate || endDate) {
+        const start = startDate ? parseLocalDate(startDate) : null;
+        const end = endDate ? parseLocalDate(endDate, true) : null;
+        if (isPaidFilter && computedStatus === BillStatus.PAID) {
+          // Para contas pagas, filtrar pela data de pagamento
+          if (displayPaidDateStr) {
+            const paidDateObj = parseLocalDate(displayPaidDateStr);
+            matchesDate =
+              (!start || (paidDateObj !== null && paidDateObj >= start)) &&
+              (!end || (paidDateObj !== null && paidDateObj <= end));
+          }
+          // Se não tem data de pagamento registrada, incluir a conta mesmo assim
+        } else {
+          // Para outros status, filtrar pela data de vencimento
+          const billDate = parseLocalDate(bill.dueDate);
+          matchesDate =
+            (!start || (billDate !== null && billDate >= start)) &&
+            (!end || (billDate !== null && billDate <= end));
+        }
+      }
 
       return matchesSearch && matchesStatus && matchesSupplier && matchesDate;
     });
 
-    // Aplicar ordenação conforme selecionado
     return filtered.sort((a, b) => {
       switch (sortBy) {
         case 'dueDate':
           return new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime();
-        case 'paidDate':
-          const aPaidDate = a.paidDate ? new Date(a.paidDate).getTime() : Infinity;
-          const bPaidDate = b.paidDate ? new Date(b.paidDate).getTime() : Infinity;
+        case 'paidDate': {
+          const aDisplayPaidDate = getBillDisplayPaidDate(a);
+          const bDisplayPaidDate = getBillDisplayPaidDate(b);
+          const aPaidDate = aDisplayPaidDate ? new Date(`${aDisplayPaidDate}T12:00:00`).getTime() : Infinity;
+          const bPaidDate = bDisplayPaidDate ? new Date(`${bDisplayPaidDate}T12:00:00`).getTime() : Infinity;
           return aPaidDate - bPaidDate;
+        }
         case 'amount':
-          return b.amount - a.amount; // Maior valor primeiro
+          return b.amount - a.amount;
         case 'supplier': {
-          const aSupplier = suppliers.find(s => s.id === a.supplierId)?.name || '';
-          const bSupplier = suppliers.find(s => s.id === b.supplierId)?.name || '';
+          const aSupplier = suppliers.find((item) => item.id === a.supplierId)?.name || '';
+          const bSupplier = suppliers.find((item) => item.id === b.supplierId)?.name || '';
           return aSupplier.localeCompare(bSupplier);
         }
         default:
           return 0;
       }
     });
-  }, [bills, suppliers, accounts, searchTerm, statusFilter, supplierFilter, startDate, endDate, sortBy]);
+  }, [accounts, bills, endDate, searchTerm, sortBy, startDate, statusFilter, supplierFilter, suppliers]);
 
   const canEdit = userRole !== UserRole.VIEWER;
-  const canDelete = userRole !== UserRole.VIEWER; // Qualquer usuário logado pode excluir, exceto VIEWER
-  const canMarkPaid = userRole === UserRole.ADMIN;
+  const canDelete = userRole !== UserRole.VIEWER;
 
   const buildPdfDoc = () => {
-    const doc = new jsPDF();
-    
-    // Cabeçalho com nome da empresa
-    doc.setFontSize(16);
-    doc.setTextColor(30, 41, 59);
-    doc.text(companyName, 14, 15);
-    
-    // Subtítulo com data
-    const title = `Relatório de Contas a Pagar - ${new Date().toLocaleDateString()}`;
-    doc.setFontSize(11);
-    doc.setTextColor(100, 116, 139);
-    doc.text(title, 14, 22);
+    const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+    const rows = filteredBills.map((bill) => {
+      const supplier = suppliers.find((item) => item.id === bill.supplierId);
+      const computedStatus = getComputedStatus(bill);
+      const paymentSource = getBillPaymentSource(bill);
 
-    const formatDateForPdf = (dateStr: string) => {
-      if (!dateStr) return '';
-      return formatDatePtBR(dateStr);
-    };
-    const periodLabel = startDate || endDate
-      ? `Período do filtro: ${formatDateForPdf(startDate) || 'Início'} até ${formatDateForPdf(endDate) || 'Hoje'}`
-      : 'Período do filtro: Todos os lançamentos';
-    doc.setFontSize(10);
-    doc.setTextColor(120, 140, 160);
-    doc.text(periodLabel, 14, 28);
-    
-    const tableData = filteredBills.map(b => {
-      const s = suppliers.find(sup => sup.id === b.supplierId);
-      const acc = accounts.find(a => a.id === b.accountId);
-      const typeLabel = acc?.type === 'VARIABLE' ? '(V)' : '(F)';
-      const desc = b.currentInstallment ? `${b.description} (${b.currentInstallment}/${b.totalInstallments})` : b.description;
       return [
-        s?.name || 'N/A', 
-        `${desc} ${typeLabel}`, 
-        acc?.name || 'N/A',
-        b.launchedBy ? b.launchedBy.split('@')[0] : 'N/A',
-        new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(b.amount), 
-        formatDatePtBR(b.dueDate), 
-        b.status
+        supplier?.name || 'Fornecedor desconhecido',
+        bill.description,
+        formatDatePtBR(bill.dueDate),
+        formatCurrency(bill.amount),
+        formatDatePtBR(getBillDisplayPaidDate(bill)),
+        formatCurrency(getBillDisplayPaidAmount(bill)),
+        paymentSource === 'bank' ? 'Banco' : paymentSource === 'manual' ? 'Manual' : '—',
+        computedStatus,
       ];
     });
-    
-    (doc as any).autoTable({ 
-      startY: 34,
-      columnStyles: {
-        0: { cellWidth: 45 },
-        1: { cellWidth: 30 },
-        2: { cellWidth: 30 },
-        3: { cellWidth: 25 },
-        4: { cellWidth: 28, halign: 'right' },
-        5: { cellWidth: 25, halign: 'center' },
-        6: { cellWidth: 20, halign: 'center' }
-      },
-      head: [['Fornecedor', 'Descrição', 'Centro de Custo', 'Lançado Por', 'Valor', 'Vencimento', 'Status']], 
-      body: tableData, 
-      theme: 'grid', 
-      headStyles: { fillStyle: '#4f46e5', textColor: '#ffffff', fontStyle: 'bold' },
-      bodyStyles: { textColor: '#000000' }
+
+    doc.setFontSize(16);
+    doc.text(companyName, 14, 16);
+    doc.setFontSize(10);
+    const statusLabels: Record<string, string> = {
+      'OPEN': 'Pendentes + Atrasadas',
+      'OPEN_NOT_OVERDUE': 'Somente não vencidas',
+      'ALL': 'Todos os Status',
+      [BillStatus.PENDING]: 'Pendentes',
+      [BillStatus.OVERDUE]: 'Atrasadas',
+      [BillStatus.PAID]: 'Pagas',
+    };
+    const statusLabel = statusLabels[statusFilter] || statusFilter;
+    let subtitle = `Relatório de Contas a Pagar (${statusLabel}) - ${new Date().toLocaleDateString('pt-BR')}`;
+    if (startDate || endDate) {
+      const rangeStart = startDate ? formatDatePtBR(startDate) : '...';
+      const rangeEnd = endDate ? formatDatePtBR(endDate) : '...';
+      subtitle += ` | Período: ${rangeStart} a ${rangeEnd}`;
+    }
+    doc.text(subtitle, 14, 22);
+
+    (doc as any).autoTable({
+      startY: 28,
+      head: [['Fornecedor', 'Descrição', 'Vencimento', 'Valor previsto', 'Pago em', 'Valor pago', 'Origem', 'Status']],
+      body: rows,
+      theme: 'grid',
+      styles: { fontSize: 8, cellPadding: 2 },
+      headStyles: { fillColor: [79, 70, 229], textColor: 255 },
     });
-    
-    const total = filteredBills.reduce((acc, curr) => acc + curr.amount, 0);
-    const finalY = (doc as any).lastAutoTable.finalY + 10;
-    doc.setFontSize(12);
-    doc.setTextColor(30, 41, 59);
-    doc.setFont(undefined, 'bold');
-    doc.text(`Total do Período: ${new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(total)}`, 14, finalY);
+
+    const boletoBills = filteredBills.filter((bill) => bill.boletoLine);
+    if (boletoBills.length > 0) {
+      let cursorY = ((doc as any).lastAutoTable?.finalY || 28) + 12;
+
+      boletoBills.forEach((bill, index) => {
+        const supplier = suppliers.find((item) => item.id === bill.supplierId);
+        const barcodeDataUrl = getBoletoBarcodeDataUrl(bill.boletoLine);
+        const blockHeight = 34;
+
+        if (cursorY + blockHeight > 285) {
+          doc.addPage();
+          cursorY = 18;
+        }
+
+        if (index === 0 || cursorY === 18) {
+          doc.setFontSize(11);
+          doc.setTextColor(30, 41, 59);
+          doc.setFont(undefined, 'bold');
+          doc.text('Boletos do periodo', 14, cursorY);
+          cursorY += 6;
+        }
+
+        doc.setDrawColor(226, 232, 240);
+        doc.roundedRect(14, cursorY, 182, 26, 3, 3);
+
+        doc.setFontSize(9);
+        doc.setTextColor(51, 65, 85);
+        doc.setFont(undefined, 'bold');
+        doc.text(supplier?.name || 'Fornecedor desconhecido', 18, cursorY + 6);
+
+        doc.setFontSize(8);
+        doc.setTextColor(100, 116, 139);
+        doc.setFont(undefined, 'normal');
+        doc.text(`Vencimento: ${formatDatePtBR(bill.dueDate)}   Valor: ${formatCurrency(bill.amount)}`, 18, cursorY + 11);
+        doc.text(formatBoletoCode(bill.boletoLine), 18, cursorY + 16, { maxWidth: 174 });
+
+        if (barcodeDataUrl) {
+          doc.addImage(barcodeDataUrl, 'PNG', 18, cursorY + 18, 174, 8);
+        }
+
+        cursorY += 31;
+      });
+    }
+
     return doc;
   };
 
   const exportPDF = () => {
     const doc = buildPdfDoc();
-    doc.save(`${companyName}-relatorio-contas-${new Date().getTime()}.pdf`);
+    doc.save('contas-a-pagar.pdf');
   };
 
   const previewPDF = () => {
     const doc = buildPdfDoc();
-    const dataUri = doc.output('datauristring');
-    setPdfPreviewUrl(dataUri);
+    setPdfPreviewUrl(doc.output('datauristring'));
     setShowPdfPreview(true);
   };
 
   const handlePaidDateChange = (billId: string, paidDate: string) => {
-    const bill = bills.find(b => b.id === billId);
-    if (!bill) return;
-    
+    const bill = bills.find((item) => item.id === billId);
+    if (!bill || isBankPayment(bill)) return;
+
     if (paidDate) {
-      // Quando data de pagamento é preenchida, marca como PAID
-      onStatusChange(billId, BillStatus.PAID);
-      // Atualizar com a data de pagamento e manter paidAmount se já existir
-      onEdit({ ...bill, paidDate, status: BillStatus.PAID });
-    } else {
-      // Quando data de pagamento é limpa, volta ao status PENDING e remove paidAmount
-      onStatusChange(billId, BillStatus.PENDING);
-      onEdit({ ...bill, paidDate: undefined, paidAmount: undefined, status: BillStatus.PENDING });
+      onUpdate({
+        ...bill,
+        paidDate,
+        status: BillStatus.PAID,
+        bankMatches: undefined,
+        paymentSource: 'manual',
+        paymentBankTransactionId: undefined,
+        paymentBankReference: undefined,
+        paymentBankDescription: undefined,
+        paymentBankDocument: undefined,
+      });
+      return;
     }
+
+    onUpdate({
+      ...bill,
+      paidDate: undefined,
+      paidAmount: undefined,
+      interestAmount: undefined,
+      bankMatches: undefined,
+      paymentSource: undefined,
+      paymentBankTransactionId: undefined,
+      paymentBankReference: undefined,
+      paymentBankDescription: undefined,
+      paymentBankDocument: undefined,
+      status: BillStatus.PENDING,
+    });
   };
 
-  const handlePaidAmountChange = (billId: string, paidAmount: number) => {
-    const bill = bills.find(b => b.id === billId);
-    if (!bill) return;
-    
-    // Calcula automaticamente os juros/multas (diferença entre valor pago e valor da conta)
-    const interestAmount = paidAmount ? paidAmount - bill.amount : undefined;
-    
-    onEdit({ ...bill, paidAmount: paidAmount || undefined, interestAmount });
+  const handlePaidAmountChange = (billId: string, paidAmount?: number) => {
+    const bill = bills.find((item) => item.id === billId);
+    if (!bill || isBankPayment(bill)) return;
+
+    const interestAmount = paidAmount !== undefined ? paidAmount - bill.amount : undefined;
+
+    onUpdate({
+      ...bill,
+      paidAmount,
+      interestAmount,
+      bankMatches: undefined,
+      paymentSource: bill.paidDate || paidAmount !== undefined ? 'manual' : undefined,
+      paymentBankTransactionId: undefined,
+      paymentBankReference: undefined,
+      paymentBankDescription: undefined,
+      paymentBankDocument: undefined,
+    });
   };
 
+  const handleDeleteClick = (billId: string, description: string) => {
+    if (!window.confirm(`Deseja realmente excluir a conta "${description}"?`)) return;
+    onDelete(billId);
+  };
+
+  const handleReopenReconciliationClick = (bill: Bill) => {
+    if (!window.confirm(`Deseja reabrir a conciliacao bancaria da conta "${bill.description}"?`)) return;
+    onReopenReconciliation(bill);
+  };
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+      <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
         <div>
-          <h1 className="text-4xl font-black" style={{ color: theme.colors.neutral.black }}>Contas a Pagar</h1>
-          <p className="text-slate-600 font-semibold text-sm">Lista padrão mostra apenas contas pendentes e atrasadas.</p>
+          <h1 className="text-4xl font-black" style={{ color: theme.colors.neutral.black }}>
+            Contas a Pagar
+          </h1>
+          <p className="text-sm font-semibold text-slate-600">
+            Lista padrão mostra apenas contas pendentes e atrasadas.
+          </p>
         </div>
-        <div className="flex gap-2">
-                    <label className="cursor-pointer">
-                      <input type="file" accept=".ret,.txt,.pdf" onChange={handleReconcileUpload} disabled={isReconciling} className="hidden" />
-                      <span className="inline-flex items-center gap-2 px-4 py-2 rounded-xl border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 font-medium text-sm shadow-sm transition-all cursor-pointer">
-                        <Upload size={18} />
-                        {isReconciling ? 'Processando...' : 'Extrato'}
-                      </span>
-                    </label>
-          <button onClick={previewPDF} className="flex items-center gap-2 px-4 py-2 border border-slate-200 rounded-xl bg-white text-slate-700 hover:bg-slate-50 hover:shadow-md transition-all font-medium text-sm shadow-sm">
+        <div className="flex flex-wrap gap-2">
+          <button
+            onClick={previewPDF}
+            className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 shadow-sm transition-all hover:bg-slate-50 hover:shadow-md"
+          >
             <FileDown size={18} /> Visualizar PDF
           </button>
-          <button onClick={exportPDF} className="flex items-center gap-2 px-4 py-2 border border-slate-200 rounded-xl bg-white text-slate-700 hover:bg-slate-50 hover:shadow-md transition-all font-medium text-sm shadow-sm">
+          <button
+            onClick={exportPDF}
+            className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 shadow-sm transition-all hover:bg-slate-50 hover:shadow-md"
+          >
             <FileDown size={18} /> Exportar PDF
           </button>
           {canEdit && (
-            <button onClick={onOpenForm} className="flex items-center gap-2 px-4 py-2 rounded-xl text-white hover:shadow-lg hover:-translate-y-0.5 transition-all font-medium text-sm shadow-md" style={{ backgroundColor: theme.colors.primary.purple }}>
+            <button
+              onClick={onOpenForm}
+              className="flex items-center gap-2 rounded-xl px-4 py-2 text-sm font-medium text-white shadow-md transition-all hover:-translate-y-0.5 hover:shadow-lg"
+              style={{ backgroundColor: theme.colors.primary.purple }}
+            >
               <Plus size={18} /> Nova Conta
             </button>
           )}
         </div>
       </div>
 
-      <div className="bg-white p-4 rounded-[20px] border border-slate-100 shadow-[0_10px_15px_-3px_rgba(0,0,0,0.04)] grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-4">
+      <div className="grid grid-cols-1 gap-4 rounded-[20px] border border-slate-100 bg-white p-4 shadow-[0_10px_15px_-3px_rgba(0,0,0,0.04)] sm:grid-cols-2 md:grid-cols-5">
         <div className="relative md:col-span-1">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
-          <input 
-            type="text" 
-            placeholder="Buscar..." 
-            className="w-full pl-10 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl outline-none text-sm transition-all" 
-            value={searchTerm} 
-            onChange={(e) => setSearchTerm(e.target.value)} 
+          <input
+            type="text"
+            placeholder="Buscar..."
+            className="w-full rounded-xl border border-slate-200 bg-slate-50 py-2 pl-10 pr-4 text-sm outline-none transition-all"
+            value={draftSearchTerm}
+            onChange={(event) => setDraftSearchTerm(event.target.value)}
           />
         </div>
 
-        <div className="relative">
-          <select 
-            className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2 outline-none text-sm appearance-none" 
-            value={statusFilter} 
-            onChange={(e) => setStatusFilter(e.target.value)}
+        <div>
+          <select
+            className="w-full appearance-none rounded-xl border border-slate-200 bg-slate-50 px-4 py-2 text-sm outline-none"
+            value={draftStatusFilter}
+            onChange={(event) => setDraftStatusFilter(event.target.value)}
           >
             <option value="OPEN_NOT_OVERDUE">A Pagar (Somente não vencidas)</option>
             <option value="OPEN">A Pagar (Pendentes + Atrasadas)</option>
@@ -306,248 +427,324 @@ export const BillList: React.FC<BillListProps> = ({ bills, suppliers, accounts, 
           </select>
         </div>
 
-        <div className="relative">
-          <select 
-            className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2 outline-none text-sm appearance-none" 
-            value={supplierFilter} 
-            onChange={(e) => setSupplierFilter(e.target.value)}
+        <div>
+          <select
+            className="w-full appearance-none rounded-xl border border-slate-200 bg-slate-50 px-4 py-2 text-sm outline-none"
+            value={draftSupplierFilter}
+            onChange={(event) => setDraftSupplierFilter(event.target.value)}
           >
             <option value="ALL">Todos Fornecedores</option>
-            {suppliers.map(s => (
-              <option key={s.id} value={s.id}>{s.name}</option>
+            {suppliers.map((supplier) => (
+              <option key={supplier.id} value={supplier.id}>
+                {supplier.name}
+              </option>
             ))}
           </select>
         </div>
 
-        <div className="flex items-center gap-2">
-          <Calendar size={16} className="text-slate-400 shrink-0" />
-          <input 
-            type="date" 
-            className="w-full bg-slate-50 border border-slate-200 rounded-xl px-2 py-2 text-xs outline-none" 
-            value={startDate} 
-            onChange={(e) => setStartDate(e.target.value)} 
-          />
-        </div>
-        <div className="flex items-center gap-2">
-          <input 
-            type="date" 
-            className="w-full bg-slate-50 border border-slate-200 rounded-xl px-2 py-2 text-xs outline-none" 
-            value={endDate} 
-            onChange={(e) => setEndDate(e.target.value)} 
+        <div>
+          <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-1">
+            {draftStatusFilter === BillStatus.PAID ? 'Pagamento de' : 'Vencimento de'}
+          </label>
+          <input
+            type="date"
+            className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-2 text-sm outline-none"
+            value={draftStartDate}
+            onChange={(event) => setDraftStartDate(event.target.value)}
           />
         </div>
 
-        <div className="relative">
-          <select 
-            className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2 outline-none text-sm appearance-none" 
-            value={sortBy} 
-            onChange={(e) => setSortBy(e.target.value as 'dueDate' | 'paidDate' | 'amount' | 'supplier')}
+        <div>
+          <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-1">
+            {draftStatusFilter === BillStatus.PAID ? 'Pagamento até' : 'Vencimento até'}
+          </label>
+          <input
+            type="date"
+            className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-2 text-sm outline-none"
+            value={draftEndDate}
+            onChange={(event) => setDraftEndDate(event.target.value)}
+          />
+        </div>
+
+        <div>
+          <button
+            type="button"
+            onClick={applyFilters}
+            className="w-full rounded-xl px-4 py-2 text-sm font-bold text-white shadow-sm transition-all hover:shadow-md"
+            style={{ backgroundColor: theme.colors.primary.purple }}
           >
-            <option value="dueDate">📅 Ordenar por Vencimento</option>
-            <option value="paidDate">💳 Ordenar por Data de Pagamento</option>
-            <option value="amount">💰 Ordenar por Valor</option>
-            <option value="supplier">🏢 Ordenar por Fornecedor</option>
+            Filtrar
+          </button>
+        </div>
+
+        <div>
+          <button
+            type="button"
+            onClick={clearFilters}
+            className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-bold text-slate-600 transition-all hover:bg-slate-50"
+          >
+            Limpar
+          </button>
+        </div>
+
+        <div>
+          <select
+            className="w-full appearance-none rounded-xl border border-slate-200 bg-slate-50 px-4 py-2 text-sm outline-none"
+            value={sortBy}
+            onChange={(event) => setSortBy(event.target.value as 'dueDate' | 'paidDate' | 'amount' | 'supplier')}
+          >
+            <option value="dueDate">Ordenar por vencimento</option>
+            <option value="paidDate">Ordenar por pagamento</option>
+            <option value="amount">Ordenar por valor</option>
+            <option value="supplier">Ordenar por fornecedor</option>
           </select>
         </div>
-
       </div>
 
-      <div className="bg-white rounded-[20px] border border-slate-100 shadow-[0_10px_15px_-3px_rgba(0,0,0,0.04)] overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse min-w-[1000px]">
-            <thead>
-              <tr className="border-b border-slate-100" style={{ backgroundColor: theme.colors.neutral.bgMain }}>
-                <th className="px-6 py-4 text-sm font-semibold text-slate-500 uppercase tracking-wider">Fornecedor / Descrição</th>
-                <th className="px-6 py-4 text-sm font-semibold text-slate-500 uppercase tracking-wider text-center">Tipo</th>
-                <th className="px-6 py-4 text-sm font-semibold text-slate-500 uppercase tracking-wider">Centro de Custo</th>
-                <th className="px-6 py-4 text-sm font-semibold text-slate-500 uppercase tracking-wider flex items-center gap-1"><User size={12} /> Lançado Por</th>
-                <th className="px-6 py-4 text-sm font-semibold text-slate-500 uppercase tracking-wider">Vencimento</th>
-                <th className="px-6 py-4 text-sm font-semibold text-slate-500 uppercase tracking-wider">Data de Pagamento</th>
-                <th className="px-6 py-4 text-sm font-semibold text-slate-500 uppercase tracking-wider">Valor Pago</th>
-                <th className="px-6 py-4 text-sm font-semibold text-slate-500 uppercase tracking-wider">Juros</th>
-                <th className="px-6 py-4 text-sm font-semibold text-slate-500 uppercase tracking-wider">Valor</th>
-                <th className="px-6 py-4 text-sm font-semibold text-slate-500 uppercase tracking-wider text-right">Ações</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              {filteredBills.map(bill => {
-                const supplier = suppliers.find(s => s.id === bill.supplierId);
-                const account = accounts.find(a => a.id === bill.accountId);
-                return (
-                  <tr key={bill.id} className="hover:bg-slate-50 transition-all group">
-                    <td className="px-6 py-4">
-                      <div className="flex items-center gap-3">
-                        {bill.recurrenceType !== 'none' && <div className="p-1.5 rounded-lg" style={{ backgroundColor: '#EDE9FE', color: theme.colors.primary.purple }}><Repeat size={14} /></div>}
-                        {bill.isEstimate && <div className="bg-amber-100 px-2 py-1 rounded text-amber-700 text-xs font-bold uppercase tracking-tight">Estimativa</div>}
-                        <div>
-                          <p className="font-semibold text-sm" style={{ color: theme.colors.neutral.black }}>
-                            {(supplier?.name || 'Fornecedor Desconhecido').toUpperCase()}
-                          </p>
-                          <p className="text-sm text-slate-500 flex items-center gap-1">
-                            {bill.description}
-                            {bill.currentInstallment && <span className="ml-2 text-xs font-bold text-slate-400">({bill.currentInstallment}/{bill.totalInstallments})</span>}
-                          </p>
-                        </div>
+      <div className="overflow-hidden rounded-[20px] border border-slate-100 bg-white shadow-[0_10px_15px_-3px_rgba(0,0,0,0.04)]">
+        <div className="divide-y divide-slate-100">
+          {filteredBills.map((bill) => {
+            const supplier = suppliers.find((item) => item.id === bill.supplierId);
+            const account = accounts.find((item) => item.id === bill.accountId);
+            const overdue = isOverdue(bill);
+            const paymentSource = getBillPaymentSource(bill);
+            const bankPayment = isBankPayment(bill);
+            const partialPayment = isBillPartiallyPaid(bill);
+            const displayPaidDate = getBillDisplayPaidDate(bill);
+            const displayPaidAmount = getBillDisplayPaidAmount(bill);
+            const displayInterestAmount = getBillDisplayInterestAmount(bill);
+            const outstandingAmount = getBillOutstandingAmount(bill);
+
+            return (
+              <div key={bill.id} className="grid gap-4 px-4 py-4 lg:grid-cols-12 lg:items-start">
+                <div className="space-y-3 lg:col-span-4">
+                  <div className="flex items-start gap-3">
+                    {bill.recurrenceType !== 'none' && (
+                      <div className="mt-0.5 rounded-lg p-1.5" style={{ backgroundColor: '#EDE9FE', color: theme.colors.primary.purple }}>
+                        <Repeat size={14} />
                       </div>
-                    </td>
-                    <td className="px-6 py-4 text-center">
-                      <span 
-                        className="px-2 py-0.5 rounded text-xs font-black uppercase" 
-                        style={{ 
-                          backgroundColor: account?.type === 'VARIABLE' ? '#DBEAFE' : '#EDE9FE',
-                          color: account?.type === 'VARIABLE' ? theme.colors.accent.blue : theme.colors.primary.purple
-                        }}
-                        title={account?.type === 'VARIABLE' ? 'Despesa Variável' : 'Despesa Fixa'}
-                      >
-                        {account?.type === 'VARIABLE' ? 'V' : 'F'}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4">
-                      <div className="flex items-center gap-2 text-xs px-3 py-1 rounded-full w-fit font-bold uppercase tracking-tighter" style={{ backgroundColor: '#EDE9FE', color: theme.colors.primary.purple }}>
-                        <ListTree size={12} />
-                        {account?.name || 'N/A'}
-                      </div>
-                    </td>
-                    <td className="px-6 py-4">
-                      <div className="text-sm text-slate-600 flex items-center gap-2">
-                        <User size={14} className="text-slate-400" />
-                        <span className="font-medium">{bill.launchedBy ? bill.launchedBy.split('@')[0] : 'N/A'}</span>
-                      </div>
-                    </td>
-                    <td className="px-6 py-4">
-                      <div className="text-sm text-slate-600 flex items-center gap-2">
-                        {formatDatePtBR(bill.dueDate)}
-                        {new Date(bill.dueDate) < new Date() && bill.status !== BillStatus.PAID && (
-                          <span className="text-xs bg-rose-100 text-rose-600 px-1.5 py-0.5 rounded font-bold uppercase">Atrasada</span>
+                    )}
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <p className="text-sm font-semibold uppercase" style={{ color: theme.colors.neutral.black }}>
+                          {(supplier?.name || 'Fornecedor Desconhecido').toUpperCase()}
+                        </p>
+                        {bill.isEstimate && (
+                          <div className="rounded bg-amber-100 px-2 py-1 text-xs font-bold uppercase tracking-tight text-amber-700">
+                            Estimativa
+                          </div>
                         )}
                       </div>
-                    </td>
-                    <td className="px-6 py-4">
-                      {canEdit ? (
+                      <p className="mt-1 break-words text-sm text-slate-500">{bill.description}</p>
+                    </div>
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500">
+                    <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-1 font-semibold">
+                      <User size={12} className="text-slate-400" />
+                      {bill.launchedBy ? bill.launchedBy.split('@')[0] : 'N/A'}
+                    </span>
+                    {overdue && (
+                      <span className="rounded-full bg-rose-100 px-2 py-1 font-bold uppercase text-rose-600">Atrasada</span>
+                    )}
+                    {getComputedStatus(bill) === BillStatus.PAID && (
+                      <span className="rounded-full bg-emerald-100 px-2 py-1 font-bold uppercase text-emerald-600">Pago</span>
+                    )}
+                    {partialPayment && (
+                      <span className="rounded-full bg-amber-100 px-2 py-1 font-bold uppercase text-amber-700">Parcial</span>
+                    )}
+                    {paymentSource === 'bank' && (
+                      <span className="rounded-full bg-blue-100 px-2 py-1 font-bold uppercase text-blue-700">Banco</span>
+                    )}
+                    {paymentSource === 'manual' && (
+                      <span className="rounded-full bg-emerald-100 px-2 py-1 font-bold uppercase text-emerald-700">Manual</span>
+                    )}
+                  </div>
+                </div>
+
+                <div className="space-y-3 lg:col-span-3">
+                  <div>
+                    <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Vencimento</p>
+                    <p className="mt-1 text-sm font-semibold text-slate-700">{formatDatePtBR(bill.dueDate)}</p>
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span
+                      className="rounded px-2 py-0.5 text-xs font-black uppercase"
+                      style={{
+                        backgroundColor: account?.type === 'VARIABLE' ? '#DBEAFE' : '#EDE9FE',
+                        color: account?.type === 'VARIABLE' ? theme.colors.accent.blue : theme.colors.primary.purple,
+                      }}
+                    >
+                      {account?.type === 'VARIABLE' ? 'Variável' : 'Fixa'}
+                    </span>
+
+                    <div
+                      className="flex max-w-[180px] items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-bold tracking-tight"
+                      style={{ backgroundColor: '#EDE9FE', color: theme.colors.primary.purple }}
+                      title={account?.name || 'N/A'}
+                    >
+                      <ListTree size={12} />
+                      <span className="truncate">{account?.name || 'N/A'}</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="space-y-3 lg:col-span-3">
+                  <div>
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Pago em</p>
+                      {paymentSource && (
+                        <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold uppercase ${bankPayment ? 'bg-blue-100 text-blue-700' : 'bg-emerald-100 text-emerald-700'}`}>
+                          {bankPayment ? 'Banco' : 'Manual'}
+                        </span>
+                      )}
+                    </div>
+                    {canEdit ? (
+                      <div className="mt-1 space-y-2">
                         <input
                           type="date"
-                          value={bill.paidDate || ''}
-                          onChange={(e) => handlePaidDateChange(bill.id, e.target.value)}
-                          className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none bg-white hover:border-slate-300 transition-colors"
-                          title="Preencha para marcar como pago"
+                          value={displayPaidDate || ''}
+                          disabled={bankPayment}
+                          onChange={(event) => handlePaidDateChange(bill.id, event.target.value)}
+                          className="w-full rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-xs outline-none focus:ring-2 focus:ring-emerald-500 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500"
                         />
-                      ) : (
-                        <span className="text-sm text-slate-600">
-                          {bill.paidDate ? formatDatePtBR(bill.paidDate) : '—'}
-                        </span>
-                      )}
-                    </td>
-                    <td className="px-6 py-4">
-                      {canEdit ? (
-                        <input
-                          type="number"
-                          step="0.01"
-                          value={bill.paidAmount || ''}
-                          onChange={(e) => handlePaidAmountChange(bill.id, parseFloat(e.target.value))}
-                          className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none bg-white hover:border-slate-300 transition-colors"
-                          placeholder={new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(bill.amount)}
-                          title="Valor efetivamente pago (com juros/multas ou descontos)"
-                        />
-                      ) : (
-                        <span className="text-sm text-slate-600 font-bold">
-                          {bill.paidAmount ? new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(bill.paidAmount) : '—'}
-                        </span>
-                      )}
-                    </td>
-                    <td className="px-6 py-4">
-                      {bill.interestAmount !== undefined && bill.interestAmount !== 0 ? (
-                        <span className={`text-sm font-bold ${bill.interestAmount > 0 ? 'text-rose-600' : 'text-emerald-600'}`}>
-                          {bill.interestAmount > 0 ? '+' : ''}{new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(bill.interestAmount)}
-                        </span>
-                      ) : (
-                        <span className="text-sm text-slate-400">—</span>
-                      )}
-                    </td>
-                    <td className="px-6 py-4">
-                      <span className="font-semibold text-sm" style={{ color: theme.colors.neutral.black }}>
-                        {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(bill.amount)}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 text-right">
-                      <div className="flex items-center justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                        {canEdit && (
-                          <button 
-                            onClick={() => onToggleEstimate(bill.id)} 
-                            className={`p-2 rounded-lg transition-colors ${bill.isEstimate ? 'text-amber-600 hover:bg-amber-50' : 'text-slate-400 hover:bg-slate-50'}`}
-                            title={bill.isEstimate ? 'Marcar como valor real' : 'Marcar como estimativa'}
+                        {displayPaidDate && !bankPayment && (
+                          <button
+                            type="button"
+                            onClick={() => handlePaidDateChange(bill.id, '')}
+                            className="rounded-lg px-2 py-1 text-[10px] font-bold text-rose-600 transition-colors hover:bg-rose-50"
                           >
-                            <AlertCircle size={18} />
+                            Limpar pagamento
                           </button>
                         )}
-                        {canEdit && (
-                          <button onClick={() => onEdit(bill)} className="p-2 hover:bg-purple-50 rounded-lg transition-colors" style={{ color: theme.colors.primary.purple }} title="Editar">
-                            <Edit2 size={18} />
-                          </button>
-                        )}
-                        {canDelete && (
-                          <button onClick={() => onDelete(bill.id)} className="p-2 text-rose-600 hover:bg-rose-50 rounded-lg transition-colors" title="Excluir">
-                            <Trash2 size={18} />
-                          </button>
+                        {bankPayment && (
+                          <p className="text-[11px] text-blue-700">
+                            Preenchido pelo banco. Altere pela conciliação.
+                          </p>
                         )}
                       </div>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+                    ) : (
+                      <p className="mt-1 text-sm text-slate-700">{formatDatePtBR(displayPaidDate)}</p>
+                    )}
+                  </div>
+
+                  <div>
+                    <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Valor pago</p>
+                    {canEdit ? (
+                      <input
+                        type="text"
+                        inputMode="decimal"
+                        value={paidAmountInputs[bill.id] ?? (displayPaidAmount !== undefined ? formatCurrencyInput(displayPaidAmount) : '')}
+                        disabled={bankPayment}
+                        onChange={(event) => {
+                          const raw = event.target.value;
+                          setPaidAmountInputs((prev) => ({ ...prev, [bill.id]: raw }));
+                          handlePaidAmountChange(bill.id, parseCurrencyInput(raw));
+                        }}
+                        className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-xs outline-none focus:ring-2 focus:ring-emerald-500 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500"
+                        placeholder="0,00"
+                      />
+                    ) : (
+                      <p className="mt-1 text-sm text-slate-700">{formatCurrency(displayPaidAmount)}</p>
+                    )}
+                    {bankPayment && bill.paymentBankReference && (
+                      <p className="mt-1 text-[11px] text-slate-500">Ref. bancária: {bill.paymentBankReference}</p>
+                    )}
+                  </div>
+                </div>
+
+                <div className="space-y-3 lg:col-span-1">
+                  <div>
+                    <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Valor previsto</p>
+                    <p className="mt-1 text-sm font-semibold" style={{ color: theme.colors.neutral.black }}>
+                      {formatCurrency(bill.amount)}
+                    </p>
+                    {partialPayment && (
+                      <p className="mt-1 text-[11px] font-semibold text-amber-700">
+                        Saldo em aberto: {formatCurrency(outstandingAmount)}
+                      </p>
+                    )}
+                  </div>
+
+                  <div>
+                    <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Juros</p>
+                    {bill.isEstimate ? (
+                      <p className="mt-1 text-sm text-slate-400">—</p>
+                    ) : displayInterestAmount !== undefined && displayInterestAmount !== 0 ? (
+                      <p className={`mt-1 text-sm font-bold ${displayInterestAmount > 0 ? 'text-rose-600' : 'text-emerald-600'}`}>
+                        {displayInterestAmount > 0 ? '+' : ''}
+                        {formatCurrency(displayInterestAmount)}
+                      </p>
+                    ) : (
+                      <p className="mt-1 text-sm text-slate-400">—</p>
+                    )}
+                  </div>
+                </div>
+
+                <div className="flex flex-wrap items-start justify-start gap-2 lg:col-span-1 lg:justify-end">
+                  {canEdit && bankPayment && (
+                    <button
+                      type="button"
+                      onClick={() => handleReopenReconciliationClick(bill)}
+                      className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] font-bold uppercase tracking-wide text-amber-700 transition-colors hover:bg-amber-100"
+                      title="Reabrir conciliacao bancaria"
+                    >
+                      Reabrir conciliacao
+                    </button>
+                  )}
+                  {canEdit && (
+                    <button
+                      onClick={() => onToggleEstimate(bill.id)}
+                      className={`rounded-lg p-2 transition-colors ${bill.isEstimate ? 'text-amber-600 hover:bg-amber-50' : 'text-slate-400 hover:bg-slate-50'}`}
+                      title={bill.isEstimate ? 'Marcar como valor real' : 'Marcar como estimativa'}
+                    >
+                      <AlertCircle size={18} />
+                    </button>
+                  )}
+                  {canEdit && (
+                    <button
+                      onClick={() => onEdit(bill)}
+                      className="rounded-lg p-2 transition-colors hover:bg-purple-50"
+                      style={{ color: theme.colors.primary.purple }}
+                      title="Editar"
+                    >
+                      <Edit2 size={18} />
+                    </button>
+                  )}
+                  {canDelete && (
+                    <button
+                      onClick={() => handleDeleteClick(bill.id, bill.description)}
+                      className="rounded-lg p-2 text-rose-600 transition-colors hover:bg-rose-50"
+                      title="Excluir"
+                    >
+                      <Trash2 size={18} />
+                    </button>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+
           {filteredBills.length === 0 && (
-            <div className="p-20 text-center bg-slate-50/50">
-              <p className="text-slate-400 font-medium">Nenhuma conta encontrada com os filtros aplicados.</p>
+            <div className="p-20 text-center">
+              <p className="font-medium text-slate-400">Nenhuma conta encontrada com os filtros aplicados.</p>
             </div>
           )}
         </div>
       </div>
 
       {showPdfPreview && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 flex items-center justify-center p-4">
-          <div className="bg-white rounded-[20px] shadow-[0_20px_25px_-5px_rgba(0,0,0,0.1)] w-full max-w-5xl h-[85vh] overflow-hidden flex flex-col">
-            <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100" style={{ backgroundColor: theme.colors.neutral.bgMain }}>
-              <div>
-                <h3 className="text-lg font-black" style={{ color: theme.colors.neutral.black }}>Pré-visualização do Relatório</h3>
-                <p className="text-xs text-slate-500 font-bold uppercase tracking-wider">Contas a Pagar</p>
-              </div>
-              <div className="flex items-center gap-2">
-                <button onClick={exportPDF} className="px-4 py-2 text-white rounded-lg font-bold hover:shadow-lg transition-all" style={{ backgroundColor: theme.colors.primary.purple }}>
-                  Exportar PDF
-                </button>
-                <button onClick={() => setShowPdfPreview(false)} className="px-4 py-2 border border-slate-200 rounded-lg font-bold text-slate-600 hover:bg-slate-50 transition-colors">
-                  Fechar
-                </button>
-              </div>
-            </div>
-            <div className="flex-1 bg-slate-100">
-              <iframe title="PDF Preview" src={pdfPreviewUrl} className="w-full h-full" />
-            </div>
-          </div>
-        </div>
-      )}
-
-              {showPdfPreview && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 flex items-center justify-center p-4">
-          <div className="bg-white rounded-[20px] shadow-[0_20px_25px_-5px_rgba(0,0,0,0.1)] w-full max-w-5xl h-[85vh] overflow-hidden flex flex-col">
-            <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100" style={{ backgroundColor: theme.colors.neutral.bgMain }}>
-              <div>
-                <h3 className="text-lg font-black" style={{ color: theme.colors.neutral.black }}>Pré-visualização do Relatório</h3>
-                <p className="text-xs text-slate-500 font-bold uppercase tracking-wider">Contas a Pagar</p>
-              </div>
-              <div className="flex items-center gap-2">
-                <button onClick={exportPDF} className="px-4 py-2 text-white rounded-lg font-bold hover:shadow-lg transition-all" style={{ backgroundColor: theme.colors.primary.purple }}>
-                  Exportar PDF
-                </button>
-                <button onClick={() => setShowPdfPreview(false)} className="px-4 py-2 border border-slate-200 rounded-lg font-bold text-slate-600 hover:bg-slate-50 transition-colors">
-                  Fechar
-                </button>
-              </div>
-            </div>
-            <div className="flex-1 bg-slate-100">
-              <iframe title="PDF Preview" src={pdfPreviewUrl} className="w-full h-full" />
-            </div>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-4">
+          <div className="relative h-[90vh] w-full max-w-5xl overflow-hidden rounded-2xl bg-white shadow-2xl">
+            <button
+              type="button"
+              onClick={() => setShowPdfPreview(false)}
+              className="absolute right-4 top-4 z-10 rounded-lg bg-slate-900/80 px-3 py-1 text-sm font-semibold text-white"
+            >
+              Fechar
+            </button>
+            <iframe title="Prévia PDF" src={pdfPreviewUrl} className="h-full w-full" />
           </div>
         </div>
       )}
