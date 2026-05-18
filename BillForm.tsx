@@ -87,6 +87,7 @@ export const BillForm: React.FC<BillFormProps> = ({ suppliers, accounts, onClose
   const boletoGuess = initialData?.boletoAttachment || initialData?.attachments?.find((item) => /boleto/i.test(item.name));
   const [isUploading, setIsUploading] = useState(false);
   const [attachmentError, setAttachmentError] = useState<string | null>(null);
+  const [formError, setFormError] = useState<string | null>(null);
   const [editScope, setEditScope] = useState<'single' | 'series'>(initialData?.parentId ? 'single' : 'series');
   const [legacyAttachments] = useState<BillAttachment[]>(initialData?.attachments || []);
   const [formData, setFormData] = useState<Partial<Bill> & { amountInput?: string; paidAmountInput?: string }>({
@@ -210,9 +211,19 @@ export const BillForm: React.FC<BillFormProps> = ({ suppliers, accounts, onClose
 
   const handleSubmit = async (event?: React.SyntheticEvent) => {
     event?.preventDefault?.();
-    if (!formData.description || !formData.supplierId || !formData.accountId) return alert('Preencha descriÃ§Ã£o, fornecedor e centro de custo.');
-    if (formData.recurrenceType === 'specific' && dueDrafts.some((due) => !due.date || due.amount <= 0)) return alert('Todos os vencimentos precisam de data e valor maior que zero.');
-    if (formData.recurrenceType !== 'specific' && (!formData.amount || !formData.dueDate)) return alert('Preencha o valor e a data de vencimento.');
+    setFormError(null);
+    if (!formData.description || !formData.supplierId || !formData.accountId) {
+      setFormError('Preencha descrição, fornecedor e centro de custo.');
+      return;
+    }
+    if (formData.recurrenceType === 'specific' && dueDrafts.some((due) => !due.date || due.amount <= 0)) {
+      setFormError('Todos os vencimentos precisam de data e valor maior que zero.');
+      return;
+    }
+    if (formData.recurrenceType !== 'specific' && (!formData.amount || !formData.dueDate)) {
+      setFormError('Preencha o valor e a data de vencimento.');
+      return;
+    }
     setIsUploading(true);
     setAttachmentError(null);
     try {
@@ -317,7 +328,7 @@ export const BillForm: React.FC<BillFormProps> = ({ suppliers, accounts, onClose
         <form onSubmit={handleSubmit} className="flex-1 space-y-4 overflow-y-auto p-6" noValidate>
           <div>
             <label className="mb-1 block text-sm font-medium text-slate-700">DescriÃ§Ã£o</label>
-            <input className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 focus:outline-none focus:ring-2 focus:ring-indigo-500" value={formData.description || ''} onChange={(e) => setFormData({ ...formData, description: e.target.value })} placeholder="Ex: Compra de insumos - NF 1234" />
+            <input className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 focus:outline-none focus:ring-2 focus:ring-indigo-500" value={formData.description || ''} onChange={(e) => { setFormError(null); setFormData({ ...formData, description: e.target.value }); }} placeholder="Ex: Compra de insumos - NF 1234" />
           </div>
 
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
@@ -491,6 +502,7 @@ export const BillForm: React.FC<BillFormProps> = ({ suppliers, accounts, onClose
               <p className="text-xs text-slate-500">{singleBoleto.extracting ? 'Extraindo do arquivo...' : singleBoleto.message || 'Campo editÃ¡vel para ajuste manual.'}</p>
             </div>
           )}
+          {formError && <p className="rounded-xl bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-700">{formError}</p>}
           {attachmentError && <p className="text-xs font-semibold text-rose-600">{attachmentError}</p>}
 
           {allowsSingleInstallmentDetails && (

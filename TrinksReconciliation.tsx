@@ -211,12 +211,12 @@ export const TrinksReconciliation: React.FC<Props> = ({ user, onBack, onShowCash
     totTrinks.total += t.total;
   });
   caixaDias.forEach(c => {
-    totCaixa.din += c.dinTotal;
-    totCaixa.rede += c.redeTotal;
-    totCaixa.pagSeg += c.pagSegTotal;
-    totCaixa.inter += c.interTotal;
-    totCaixa.frog += c.frogTotal;
-    totCaixa.total += c.grandTotal;
+    totCaixa.din += c.dinTotal ?? 0;
+    totCaixa.rede += c.redeTotal ?? 0;
+    totCaixa.pagSeg += c.pagSegTotal ?? 0;
+    totCaixa.inter += c.interTotal ?? 0;
+    totCaixa.frog += c.frogTotal ?? 0;
+    totCaixa.total += c.grandTotal ?? 0;
   });
 
   const nomesMes = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
@@ -372,11 +372,11 @@ export const TrinksReconciliation: React.FC<Props> = ({ user, onBack, onShowCash
 
                     const getCaixaVal = (col: Coluna): number => {
                       if (!cx) return 0;
-                      if (col === 'din') return cx.dinTotal;
-                      if (col === 'rede') return cx.redeTotal;
-                      if (col === 'pagSeg') return cx.pagSegTotal;
-                      if (col === 'inter') return cx.interTotal;
-                      if (col === 'frog') return cx.frogTotal;
+                      if (col === 'din') return cx.dinTotal ?? 0;
+                      if (col === 'rede') return cx.redeTotal ?? 0;
+                      if (col === 'pagSeg') return cx.pagSegTotal ?? 0;
+                      if (col === 'inter') return cx.interTotal ?? 0;
+                      if (col === 'frog') return cx.frogTotal ?? 0;
                       return 0;
                     };
 
