@@ -1,6 +1,6 @@
-import React, { useMemo, useState } from 'react';
-import { Bill, BillStatus, ChartOfAccount, Supplier, UserRole } from './types';
-import { AlertCircle, Edit2, FileDown, ListTree, Plus, Repeat, Search, Trash2, User } from 'lucide-react';
+import React, { useEffect, useMemo, useState } from 'react';
+import { Bill, BillStatus, ChartOfAccount, Supplier, TeamMember, UserRole } from './types';
+import { AlertCircle, Copy, Edit2, FileDown, ListTree, Plus, Repeat, Search, Trash2, User } from 'lucide-react';
 import { jsPDF } from 'jspdf';
 import 'jspdf-autotable';
 import { theme } from './theme';
@@ -11,14 +11,17 @@ interface BillListProps {
   bills: Bill[];
   suppliers: Supplier[];
   accounts: ChartOfAccount[];
+  teamMembers: TeamMember[];
   onEdit: (bill: Bill) => void;
   onDelete: (id: string) => void;
   onStatusChange: (id: string, status: BillStatus) => void;
   onUpdate: (bill: Bill) => void;
+  onDuplicate: (bill: Bill) => Promise<void> | void;
   onReopenReconciliation: (bill: Bill) => Promise<void> | void;
   onOpenForm: () => void;
   onToggleEstimate: (id: string) => void;
-  userRole: UserRole;
+  userRole?: UserRole;
+  canEditBills?: boolean;
   companyName?: string;
 }
 
@@ -26,14 +29,17 @@ export const BillList: React.FC<BillListProps> = ({
   bills,
   suppliers,
   accounts,
+  teamMembers,
   onEdit,
   onDelete,
   onStatusChange,
   onUpdate,
+  onDuplicate,
   onReopenReconciliation,
   onOpenForm,
   onToggleEstimate,
   userRole,
+  canEditBills,
   companyName = 'PAGA.AI',
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
@@ -50,15 +56,48 @@ export const BillList: React.FC<BillListProps> = ({
   const [pdfPreviewUrl, setPdfPreviewUrl] = useState('');
   const [sortBy, setSortBy] = useState<'dueDate' | 'paidDate' | 'amount' | 'supplier'>('dueDate');
   const [paidAmountInputs, setPaidAmountInputs] = useState<Record<string, string>>({});
+  const [whatsAppAssigneeByBillId, setWhatsAppAssigneeByBillId] = useState<Record<string, string>>({});
+  const teamMembersWithPhone = useMemo(
+    () =>
+      teamMembers.filter((member) => member.active !== false && Boolean(member.phone?.trim())),
+    [teamMembers]
+  );
+
+  const normalizeComparableDate = (value?: string) => {
+    if (!value) return undefined;
+    const trimmed = value.trim();
+    if (!trimmed) return undefined;
+
+    if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) return trimmed;
+
+    if (/^\d{2}\/\d{2}\/\d{4}$/.test(trimmed)) {
+      const [day, month, year] = trimmed.split('/');
+      return `${year}-${month}-${day}`;
+    }
+
+    const isoMatch = trimmed.match(/^(\d{4}-\d{2}-\d{2})[T\s]/);
+    if (isoMatch) return isoMatch[1];
+
+    const parsed = new Date(trimmed);
+    if (Number.isNaN(parsed.getTime())) return undefined;
+
+    const year = parsed.getFullYear();
+    const month = String(parsed.getMonth() + 1).padStart(2, '0');
+    const day = String(parsed.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
 
   const formatDatePtBR = (dateStr?: string): string => {
+    dateStr = normalizeComparableDate(dateStr);
     if (!dateStr || !/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) return '—';
     const [year, month, day] = dateStr.split('-');
     return `${day}/${month}/${year}`;
   };
 
   const parseLocalDate = (value: string, endOfDay = false) => {
-    const [yearStr, monthStr, dayStr] = value.split('-');
+    const normalizedValue = normalizeComparableDate(value);
+    if (!normalizedValue) return null;
+    const [yearStr, monthStr, dayStr] = normalizedValue.split('-');
     const year = Number(yearStr);
     const month = Number(monthStr);
     const day = Number(dayStr);
@@ -142,7 +181,7 @@ export const BillList: React.FC<BillListProps> = ({
       const matchesSupplier = supplierFilter === 'ALL' || bill.supplierId === supplierFilter;
 
       const isPaidFilter = statusFilter === BillStatus.PAID;
-      const displayPaidDateStr = getBillDisplayPaidDate(bill);
+      const displayPaidDateStr = normalizeComparableDate(getBillDisplayPaidDate(bill));
       let matchesDate = true;
       if (startDate || endDate) {
         const start = startDate ? parseLocalDate(startDate) : null;
@@ -173,8 +212,8 @@ export const BillList: React.FC<BillListProps> = ({
         case 'dueDate':
           return new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime();
         case 'paidDate': {
-          const aDisplayPaidDate = getBillDisplayPaidDate(a);
-          const bDisplayPaidDate = getBillDisplayPaidDate(b);
+          const aDisplayPaidDate = normalizeComparableDate(getBillDisplayPaidDate(a));
+          const bDisplayPaidDate = normalizeComparableDate(getBillDisplayPaidDate(b));
           const aPaidDate = aDisplayPaidDate ? new Date(`${aDisplayPaidDate}T12:00:00`).getTime() : Infinity;
           const bPaidDate = bDisplayPaidDate ? new Date(`${bDisplayPaidDate}T12:00:00`).getTime() : Infinity;
           return aPaidDate - bPaidDate;
@@ -192,8 +231,8 @@ export const BillList: React.FC<BillListProps> = ({
     });
   }, [accounts, bills, endDate, searchTerm, sortBy, startDate, statusFilter, supplierFilter, suppliers]);
 
-  const canEdit = userRole !== UserRole.VIEWER;
-  const canDelete = userRole !== UserRole.VIEWER;
+  const canEdit = canEditBills !== undefined ? canEditBills : userRole !== UserRole.VIEWER;
+  const canDelete = canEditBills !== undefined ? canEditBills : userRole !== UserRole.VIEWER;
 
   const buildPdfDoc = () => {
     const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
@@ -213,6 +252,15 @@ export const BillList: React.FC<BillListProps> = ({
         computedStatus,
       ];
     });
+    const totalPrevisto = filteredBills.reduce((sum, bill) => sum + (Number.isFinite(bill.amount) ? bill.amount : 0), 0);
+    const totalPago = filteredBills.reduce((sum, bill) => sum + (getBillDisplayPaidAmount(bill) || 0), 0);
+    const totalSaldo = filteredBills.reduce((sum, bill) => sum + getBillOutstandingAmount(bill), 0);
+    const hasActiveFilters =
+      Boolean(searchTerm.trim()) ||
+      statusFilter !== 'OPEN' ||
+      supplierFilter !== 'ALL' ||
+      Boolean(startDate) ||
+      Boolean(endDate);
 
     doc.setFontSize(16);
     doc.text(companyName, 14, 16);
@@ -234,22 +282,88 @@ export const BillList: React.FC<BillListProps> = ({
     }
     doc.text(subtitle, 14, 22);
 
-    (doc as any).autoTable({
+    if (rows.length > 0) {
+      (doc as any).autoTable({
       startY: 28,
       head: [['Fornecedor', 'Descrição', 'Vencimento', 'Valor previsto', 'Pago em', 'Valor pago', 'Origem', 'Status']],
       body: rows,
       theme: 'grid',
-      styles: { fontSize: 8, cellPadding: 2 },
+      styles: { fontSize: 7.5, cellPadding: 2, valign: 'middle' },
       headStyles: { fillColor: [79, 70, 229], textColor: 255 },
+      columnStyles: {
+        0: { cellWidth: 30 },
+        1: { cellWidth: 42 },
+        2: { cellWidth: 20, halign: 'center' },
+        3: { cellWidth: 22, halign: 'right' },
+        4: { cellWidth: 20, halign: 'center' },
+        5: { cellWidth: 22, halign: 'right' },
+        6: { cellWidth: 12, halign: 'center' },
+        7: { cellWidth: 14, halign: 'center' },
+      },
+      });
+    } else {
+      doc.setFontSize(11);
+      doc.setTextColor(100, 116, 139);
+      doc.text('Nenhuma conta encontrada com os filtros aplicados.', 14, 32);
+    }
+
+    let contentBottomY = rows.length > 0
+      ? ((doc as any).lastAutoTable?.finalY || 28)
+      : 32;
+
+    if (hasActiveFilters && filteredBills.length > 0) {
+      const summaryY = contentBottomY + 8;
+      doc.setDrawColor(226, 232, 240);
+      doc.setFillColor(248, 250, 252);
+      doc.roundedRect(14, summaryY, 182, 16, 3, 3, 'FD');
+      doc.setFontSize(9);
+      doc.setTextColor(30, 41, 59);
+      doc.setFont(undefined, 'bold');
+      doc.text(`Resumo (${filteredBills.length} conta${filteredBills.length > 1 ? 's' : ''})`, 18, summaryY + 6);
+      doc.setFont(undefined, 'normal');
+      doc.setTextColor(51, 65, 85);
+      doc.text(`Previsto: ${formatCurrency(totalPrevisto)}   Pago: ${formatCurrency(totalPago)}   Saldo: ${formatCurrency(totalSaldo)}`, 18, summaryY + 12);
+      contentBottomY = summaryY + 16;
+    }
+
+    const boletoEntries = filteredBills.flatMap((bill) => {
+      const supplier = suppliers.find((item) => item.id === bill.supplierId);
+      const entries: Array<{ supplierName: string; dueDate: string; amount: number; boletoLine: string }> = [];
+
+      if (bill.boletoLine) {
+        entries.push({
+          supplierName: supplier?.name || 'Fornecedor desconhecido',
+          dueDate: bill.dueDate,
+          amount: bill.amount,
+          boletoLine: bill.boletoLine,
+        });
+      }
+
+      if (!bill.boletoLine && bill.specificDues?.length) {
+        bill.specificDues.forEach((due) => {
+          if (!due.boletoLine) return;
+          entries.push({
+            supplierName: supplier?.name || 'Fornecedor desconhecido',
+            dueDate: due.date,
+            amount: due.amount,
+            boletoLine: due.boletoLine,
+          });
+        });
+      }
+
+      return entries;
     });
 
-    const boletoBills = filteredBills.filter((bill) => bill.boletoLine);
-    if (boletoBills.length > 0) {
-      let cursorY = ((doc as any).lastAutoTable?.finalY || 28) + 12;
+    if (boletoEntries.length > 0) {
+      let cursorY = contentBottomY + 12;
 
-      boletoBills.forEach((bill, index) => {
-        const supplier = suppliers.find((item) => item.id === bill.supplierId);
-        const barcodeDataUrl = getBoletoBarcodeDataUrl(bill.boletoLine);
+      boletoEntries.forEach((entry, index) => {
+        let barcodeDataUrl = '';
+        try {
+          barcodeDataUrl = getBoletoBarcodeDataUrl(entry.boletoLine);
+        } catch (error) {
+          console.error('Erro ao gerar codigo de barras do boleto no PDF:', error);
+        }
         const blockHeight = 34;
 
         if (cursorY + blockHeight > 285) {
@@ -271,13 +385,13 @@ export const BillList: React.FC<BillListProps> = ({
         doc.setFontSize(9);
         doc.setTextColor(51, 65, 85);
         doc.setFont(undefined, 'bold');
-        doc.text(supplier?.name || 'Fornecedor desconhecido', 18, cursorY + 6);
+        doc.text(entry.supplierName, 18, cursorY + 6);
 
         doc.setFontSize(8);
         doc.setTextColor(100, 116, 139);
         doc.setFont(undefined, 'normal');
-        doc.text(`Vencimento: ${formatDatePtBR(bill.dueDate)}   Valor: ${formatCurrency(bill.amount)}`, 18, cursorY + 11);
-        doc.text(formatBoletoCode(bill.boletoLine), 18, cursorY + 16, { maxWidth: 174 });
+        doc.text(`Vencimento: ${formatDatePtBR(entry.dueDate)}   Valor: ${formatCurrency(entry.amount)}`, 18, cursorY + 11);
+        doc.text(formatBoletoCode(entry.boletoLine), 18, cursorY + 16, { maxWidth: 174 });
 
         if (barcodeDataUrl) {
           doc.addImage(barcodeDataUrl, 'PNG', 18, cursorY + 18, 174, 8);
@@ -285,6 +399,11 @@ export const BillList: React.FC<BillListProps> = ({
 
         cursorY += 31;
       });
+    } else if (rows.length > 0) {
+      const cursorY = contentBottomY + 12;
+      doc.setFontSize(9);
+      doc.setTextColor(100, 116, 139);
+      doc.text('Nenhum boleto com linha digitavel encontrado para os filtros atuais.', 14, cursorY);
     }
 
     return doc;
@@ -297,9 +416,28 @@ export const BillList: React.FC<BillListProps> = ({
 
   const previewPDF = () => {
     const doc = buildPdfDoc();
-    setPdfPreviewUrl(doc.output('datauristring'));
+    const pdfBlob = doc.output('blob');
+    const blobUrl = URL.createObjectURL(pdfBlob);
+    setPdfPreviewUrl((current) => {
+      if (current.startsWith('blob:')) URL.revokeObjectURL(current);
+      return blobUrl;
+    });
     setShowPdfPreview(true);
   };
+
+  const closePdfPreview = () => {
+    setShowPdfPreview(false);
+    setPdfPreviewUrl((current) => {
+      if (current.startsWith('blob:')) URL.revokeObjectURL(current);
+      return '';
+    });
+  };
+
+  useEffect(() => {
+    return () => {
+      if (pdfPreviewUrl.startsWith('blob:')) URL.revokeObjectURL(pdfPreviewUrl);
+    };
+  }, [pdfPreviewUrl]);
 
   const handlePaidDateChange = (billId: string, paidDate: string) => {
     const bill = bills.find((item) => item.id === billId);
@@ -362,6 +500,44 @@ export const BillList: React.FC<BillListProps> = ({
   const handleReopenReconciliationClick = (bill: Bill) => {
     if (!window.confirm(`Deseja reabrir a conciliacao bancaria da conta "${bill.description}"?`)) return;
     onReopenReconciliation(bill);
+  };
+
+  const normalizeWhatsAppPhone = (value?: string) => {
+    const digits = (value || '').replace(/\D/g, '');
+    if (!digits) return '';
+    if (digits.startsWith('55')) return digits;
+    if (digits.length === 10 || digits.length === 11) return `55${digits}`;
+    return digits;
+  };
+
+  const handleNotifyTeamMember = (bill: Bill, supplierName: string) => {
+    const selectedMemberId = whatsAppAssigneeByBillId[bill.id] || teamMembersWithPhone[0]?.id;
+    const member = teamMembersWithPhone.find((item) => item.id === selectedMemberId);
+    if (!member) {
+      alert('Nenhum membro com telefone cadastrado para envio no WhatsApp.');
+      return;
+    }
+
+    const normalizedPhone = normalizeWhatsAppPhone(member.phone);
+    if (!normalizedPhone || normalizedPhone.length < 12) {
+      alert(`Telefone invalido para ${member.name}. Confira o cadastro da equipe.`);
+      return;
+    }
+
+    const message =
+      `Olá ${member.name}, temos uma conta em aberto.` +
+      `\nFornecedor: ${supplierName}` +
+      `\nDescrição: ${bill.description}` +
+      `\nVencimento: ${formatDatePtBR(bill.dueDate)}` +
+      `\nValor: ${formatCurrency(bill.amount)}` +
+      `\n\nVerifique no PAGA.AI.`;
+
+    const url = `https://wa.me/${normalizedPhone}?text=${encodeURIComponent(message)}`;
+    const openedWindow = window.open(url, '_blank', 'noopener,noreferrer');
+    if (!openedWindow) {
+      // Fallback quando o navegador bloqueia popup
+      window.location.href = url;
+    }
   };
 
   return (
@@ -507,6 +683,7 @@ export const BillList: React.FC<BillListProps> = ({
             const supplier = suppliers.find((item) => item.id === bill.supplierId);
             const account = accounts.find((item) => item.id === bill.accountId);
             const overdue = isOverdue(bill);
+            const computedStatus = getComputedStatus(bill);
             const paymentSource = getBillPaymentSource(bill);
             const bankPayment = isBankPayment(bill);
             const partialPayment = isBillPartiallyPaid(bill);
@@ -514,6 +691,13 @@ export const BillList: React.FC<BillListProps> = ({
             const displayPaidAmount = getBillDisplayPaidAmount(bill);
             const displayInterestAmount = getBillDisplayInterestAmount(bill);
             const outstandingAmount = getBillOutstandingAmount(bill);
+            const canNotifyWhatsApp = computedStatus !== BillStatus.PAID;
+            const selectedAssigneeId = whatsAppAssigneeByBillId[bill.id] || teamMembersWithPhone[0]?.id || '';
+            const invoiceAttachments = bill.invoice?.attachments?.length ? bill.invoice.attachments : bill.invoice?.attachment ? [bill.invoice.attachment] : [];
+            const boletoAttachment = bill.boletoAttachment || bill.specificDues?.find((due) => due.boletoAttachment?.url)?.boletoAttachment;
+            const hasInvoiceAttachment = invoiceAttachments.some((a) => Boolean(a?.url));
+            const hasBoletoAttachment = Boolean(boletoAttachment?.url);
+            const hasNfOrBoletoAttachment = hasInvoiceAttachment || hasBoletoAttachment;
 
             return (
               <div key={bill.id} className="grid gap-4 px-4 py-4 lg:grid-cols-12 lg:items-start">
@@ -536,6 +720,36 @@ export const BillList: React.FC<BillListProps> = ({
                         )}
                       </div>
                       <p className="mt-1 break-words text-sm text-slate-500">{bill.description}</p>
+                      <div className="mt-2 flex flex-wrap items-center gap-2">
+                        {invoiceAttachments.filter((a) => a.url).map((att, idx) => (
+                          <a
+                            key={idx}
+                            href={att.url}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="rounded-full bg-indigo-50 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide text-indigo-700 hover:bg-indigo-100"
+                            title={`Abrir NF ${invoiceAttachments.length > 1 ? idx + 1 : ''} anexada`}
+                          >
+                            {invoiceAttachments.length > 1 ? `NF ${idx + 1}` : 'NF'}
+                          </a>
+                        ))}
+                        {hasBoletoAttachment && boletoAttachment && (
+                          <a
+                            href={boletoAttachment.url}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="rounded-full bg-sky-50 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide text-sky-700 hover:bg-sky-100"
+                            title="Abrir boleto anexado"
+                          >
+                            Boleto
+                          </a>
+                        )}
+                        {!hasNfOrBoletoAttachment && (
+                          <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide text-slate-500">
+                            Sem anexo
+                          </span>
+                        )}
+                      </div>
                     </div>
                   </div>
 
@@ -547,7 +761,7 @@ export const BillList: React.FC<BillListProps> = ({
                     {overdue && (
                       <span className="rounded-full bg-rose-100 px-2 py-1 font-bold uppercase text-rose-600">Atrasada</span>
                     )}
-                    {getComputedStatus(bill) === BillStatus.PAID && (
+                    {computedStatus === BillStatus.PAID && (
                       <span className="rounded-full bg-emerald-100 px-2 py-1 font-bold uppercase text-emerald-600">Pago</span>
                     )}
                     {partialPayment && (
@@ -683,6 +897,32 @@ export const BillList: React.FC<BillListProps> = ({
                 </div>
 
                 <div className="flex flex-wrap items-start justify-start gap-2 lg:col-span-1 lg:justify-end">
+                  {canNotifyWhatsApp && (
+                    <div className="flex w-full flex-col gap-2 lg:w-[210px]">
+                      <select
+                        value={selectedAssigneeId}
+                        onChange={(event) =>
+                          setWhatsAppAssigneeByBillId((prev) => ({ ...prev, [bill.id]: event.target.value }))
+                        }
+                        className="w-full rounded-lg border border-emerald-200 bg-emerald-50 px-2 py-1.5 text-[11px] font-semibold text-emerald-700 outline-none"
+                      >
+                        {teamMembersWithPhone.length === 0 && <option value="">Membro da equipe</option>}
+                        {teamMembersWithPhone.map((member) => (
+                          <option key={member.id} value={member.id}>
+                            {member.name}
+                          </option>
+                        ))}
+                      </select>
+                      <button
+                        type="button"
+                        onClick={() => handleNotifyTeamMember(bill, supplier?.name || 'Fornecedor desconhecido')}
+                        disabled={!selectedAssigneeId}
+                        className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-[11px] font-bold uppercase tracking-wide text-emerald-700 transition-colors hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-60"
+                      >
+                        Avisar no WhatsApp
+                      </button>
+                    </div>
+                  )}
                   {canEdit && bankPayment && (
                     <button
                       type="button"
@@ -700,6 +940,15 @@ export const BillList: React.FC<BillListProps> = ({
                       title={bill.isEstimate ? 'Marcar como valor real' : 'Marcar como estimativa'}
                     >
                       <AlertCircle size={18} />
+                    </button>
+                  )}
+                  {canEdit && (
+                    <button
+                      onClick={() => onDuplicate(bill)}
+                      className="rounded-lg p-2 text-sky-600 transition-colors hover:bg-sky-50"
+                      title="Duplicar conta"
+                    >
+                      <Copy size={18} />
                     </button>
                   )}
                   {canEdit && (
@@ -739,7 +988,7 @@ export const BillList: React.FC<BillListProps> = ({
           <div className="relative h-[90vh] w-full max-w-5xl overflow-hidden rounded-2xl bg-white shadow-2xl">
             <button
               type="button"
-              onClick={() => setShowPdfPreview(false)}
+              onClick={closePdfPreview}
               className="absolute right-4 top-4 z-10 rounded-lg bg-slate-900/80 px-3 py-1 text-sm font-semibold text-white"
             >
               Fechar
