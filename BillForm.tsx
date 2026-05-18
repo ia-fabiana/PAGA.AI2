@@ -175,10 +175,14 @@ export const BillForm: React.FC<BillFormProps> = ({ suppliers, accounts, onClose
   };
 
   const handleInvoiceFile = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
+    const files = Array.from(event.target.files || []);
+    if (!files.length) return;
     setAttachmentError(null);
-    setInvoiceFiles((prev) => prev.length >= 4 ? prev : [...prev, createDraftAttachment(file, `invoice-${prev.length + 1}`)]);
+    setInvoiceFiles((prev) => {
+      const slots = 4 - prev.length;
+      if (slots <= 0) return prev;
+      return [...prev, ...files.slice(0, slots).map((f, i) => createDraftAttachment(f, `invoice-${prev.length + i + 1}`))];
+    });
     event.target.value = '';
   };
 
@@ -359,7 +363,7 @@ export const BillForm: React.FC<BillFormProps> = ({ suppliers, accounts, onClose
             </div>
             {invoiceFiles.length < 4 && (
               <label className="flex cursor-pointer items-center gap-3 rounded-xl border-2 border-dashed border-slate-200 bg-white p-4 hover:border-indigo-300">
-                <input type="file" accept="application/pdf,image/jpeg,image/png" className="hidden" onChange={handleInvoiceFile} disabled={isUploading} />
+                <input type="file" multiple accept="application/pdf,image/jpeg,image/png" className="hidden" onChange={handleInvoiceFile} disabled={isUploading} />
                 <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-indigo-50"><FileText size={20} className="text-indigo-600" /></div>
                 <div><p className="text-sm font-semibold text-slate-700">{invoiceFiles.length === 0 ? 'Anexar Nota Fiscal' : `Adicionar NF (${invoiceFiles.length}/4)`}</p><p className="text-xs text-slate-400">PDF, JPG ou PNG · até 4 arquivos</p></div>
               </label>
