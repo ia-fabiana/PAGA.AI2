@@ -1752,6 +1752,78 @@ const App: React.FC = () => {
     return createdBill;
   };
 
+  const handleQuickCreateBillFromBankTransaction = async (
+    transaction: BankTransaction,
+    supplierId: string,
+    accountId: string,
+  ): Promise<Bill> => {
+    const createdBill = normalizeBillPaymentSource({
+      id: `bill-bank-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      supplierId,
+      description: transaction.counterparty
+        ? `${transaction.description} - ${transaction.counterparty}`
+        : transaction.description,
+      amount: transaction.amount,
+      dueDate: transaction.date,
+      paymentSource: 'bank',
+      paymentBankTransactionId: transaction.id,
+      paymentBankReference: transaction.reference,
+      paymentBankDescription: transaction.description,
+      paymentBankDocument: transaction.document,
+      bankMatches: [{
+        transactionId: transaction.id,
+        date: transaction.date,
+        amount: transaction.amount,
+        reference: transaction.reference,
+        description: transaction.description,
+        document: transaction.document,
+        counterparty: transaction.counterparty,
+        reconciledAt: new Date().toISOString(),
+        reconciledBy: user?.email,
+      }],
+      paidDate: transaction.date,
+      paidAmount: transaction.amount,
+      interestAmount: 0,
+      status: BillStatus.PAID,
+      recurrenceType: 'none',
+      accountId,
+      isEstimate: false,
+      launchedBy: user?.email,
+      observations: `Criada a partir do extrato bancario. Ref: ${transaction.reference || '-'}`,
+    });
+
+    setBills((prev) => [...prev, createdBill]);
+    if (!isMockMode && user) await saveBill(createdBill);
+    return createdBill;
+  };
+
+  const handleBulkDeleteBillsByDateRange = async (startDate: string, endDate: string): Promise<number> => {
+    const toDelete = bills.filter((b) => !b.isDeleted && b.dueDate >= startDate && b.dueDate <= endDate);
+    if (toDelete.length === 0) return 0;
+
+    if (isMockMode) {
+      setBills((prev) => prev.filter((b) => b.isDeleted || b.dueDate < startDate || b.dueDate > endDate));
+      return toDelete.length;
+    }
+
+    if (!user) return 0;
+    const billsRef = getSharedBillsRef();
+    const CHUNK = 499;
+    for (let i = 0; i < toDelete.length; i += CHUNK) {
+      const batch = writeBatch(db);
+      toDelete.slice(i, i + CHUNK).forEach((b) => {
+        batch.update(doc(billsRef, b.id), {
+          isDeleted: true,
+          deletedAt: new Date().toISOString(),
+          deletedBy: user.email || '',
+        });
+      });
+      await batch.commit();
+    }
+    setBills((prev) => prev.filter((b) => b.isDeleted || b.dueDate < startDate || b.dueDate > endDate));
+    return toDelete.length;
+  };
+
   const handleAddRevenue = async (revenue: Omit<Revenue, 'id'>) => {
     const id = `rev-${Date.now()}`;
     const newRevenue = { ...revenue, id };
@@ -2000,6 +2072,8 @@ const App: React.FC = () => {
                 onReconcileBill={handleBankTransactionBillReconcile}
                 onReopenReconciliation={handleReopenTransactionBillReconciliation}
                 onCreateBillFromTransaction={handleCreateBillFromBankTransaction}
+                onQuickCreateBillFromTransaction={handleQuickCreateBillFromBankTransaction}
+                onBulkDeleteBillsByDateRange={handleBulkDeleteBillsByDateRange}
               />
             )}
             {view === 'team' && <TeamManagement team={team} setTeam={setTeamWithPersist} canManage={isEditor(currentUser.permissions?.team)} accounts={accounts} onResyncAccess={handleResyncWorkspaceAccess} />}
