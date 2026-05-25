@@ -1,18 +1,17 @@
 
 import React, { useState } from 'react';
 import { auth, isMockMode } from './firebase';
-import { signInWithEmailAndPassword, createUserWithEmailAndPassword } from 'firebase/auth';
-import { Wallet, LogIn, Mail, Lock, Loader2, Sparkles, ShieldCheck, AlertCircle } from 'lucide-react';
+import { signInWithEmailAndPassword, createUserWithEmailAndPassword, sendPasswordResetEmail } from 'firebase/auth';
+import { LogIn, Mail, Lock, Loader2, ShieldCheck, AlertCircle } from 'lucide-react';
 
 export const Login: React.FC = () => {
-  const [email, setEmail] = useState('fabianajjvsf@gmail.com');
-  const [password, setPassword] = useState('Paga@2026');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [isRegister, setIsRegister] = useState(false);
   const [error, setError] = useState('');
 
   const SUPER_ADMIN = 'fabianajjvsf@gmail.com';
-  const ADMIN_PASSWORD = 'Paga@2026';
 
   const handleDemoLogin = () => {
     setLoading(true);
@@ -30,6 +29,33 @@ export const Login: React.FC = () => {
     if (window.confirm('Deseja realmente limpar todos os dados locais? Isso não pode ser desfeito.')) {
       localStorage.clear();
       window.location.reload();
+    }
+  };
+
+  const handleResetPassword = async () => {
+    if (!email) {
+      setError('Informe seu email para redefinir a senha.');
+      return;
+    }
+    setLoading(true);
+    setError('');
+    try {
+      await sendPasswordResetEmail(auth, email);
+      setError('Email de redefinição enviado. Verifique sua caixa de entrada.');
+    } catch (err: any) {
+      const code = typeof err?.code === 'string' ? err.code : 'auth/unknown';
+      if (code === 'auth/user-not-found') {
+        setError('Usuário não encontrado para este email.');
+      } else if (code === 'auth/invalid-email') {
+        setError('Email inválido.');
+      } else if (code === 'auth/operation-not-allowed') {
+        setError('Redefinição de senha desativada no Firebase.');
+      } else {
+        setError(`Falha ao enviar redefinição. (${code})`);
+      }
+      console.error('Reset password error:', code, err?.message || err);
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -54,18 +80,23 @@ export const Login: React.FC = () => {
         await signInWithEmailAndPassword(auth, email, password);
       }
     } catch (err: any) {
-      if (err.code === 'auth/email-already-in-use') {
+      const code = typeof err?.code === 'string' ? err.code : 'auth/unknown';
+      if (code === 'auth/email-already-in-use') {
         setError('Email já cadastrado. Tente outro ou faça login.');
-      } else if (err.code === 'auth/weak-password') {
+      } else if (code === 'auth/weak-password') {
         setError('Senha muito fraca. Use no mínimo 6 caracteres.');
-      } else if (err.code === 'auth/user-not-found') {
+      } else if (code === 'auth/user-not-found') {
         setError('Usuário não encontrado. Crie uma conta primeiro.');
-      } else if (err.code === 'auth/wrong-password') {
+      } else if (code === 'auth/wrong-password') {
         setError('Senha incorreta.');
+      } else if (code === 'auth/operation-not-allowed') {
+        setError('Login desativado no Firebase. Ative Email/Senha em Authentication.');
+      } else if (code === 'auth/invalid-login-credentials') {
+        setError('Credenciais inválidas. Confira email e senha.');
       } else {
-        setError('Falha na autenticação. Verifique os dados.');
+        setError(`Falha na autenticação. Verifique os dados. (${code})`);
       }
-      console.error(err);
+      console.error('Auth error:', code, err?.message || err);
     } finally {
       setLoading(false);
     }
@@ -80,11 +111,7 @@ export const Login: React.FC = () => {
 
       <div className="w-full max-w-md glass p-10 rounded-[2.5rem] shadow-2xl z-10 animate-in fade-in zoom-in duration-500">
         <div className="text-center mb-8">
-          <div className="inline-flex p-4 bg-indigo-600 rounded-3xl text-white shadow-xl shadow-indigo-500/20 mb-6">
-            <Wallet size={32} />
-          </div>
-          <h1 className="text-3xl font-black text-slate-800 tracking-tight">PAGA.AI</h1>
-          <p className="text-slate-500 font-medium text-sm mt-2">Gestão Financeira Inteligente</p>
+          <img src="/logo.png" alt="PAGA.AI" className="w-32 h-32 object-contain mx-auto mb-2 rounded-2xl shadow-xl" />
           
           {isMockMode && (
             <div className="mt-4 flex items-center justify-center gap-2 text-xs font-black text-amber-600 bg-amber-50 py-2 px-4 rounded-full border border-amber-100 uppercase tracking-widest mx-auto w-fit">
@@ -124,7 +151,11 @@ export const Login: React.FC = () => {
             </div>
           </div>
 
-          {error && <p className="text-rose-500 text-xs font-black text-center uppercase tracking-tight">{error}</p>}
+          {error && (
+            <div className="text-rose-500 text-xs font-black text-center uppercase tracking-tight">
+              <p>{error}</p>
+            </div>
+          )}
 
           <div className="flex flex-col gap-3">
             <button 
@@ -132,13 +163,23 @@ export const Login: React.FC = () => {
               disabled={loading}
               className="w-full bg-slate-800 text-white py-4 rounded-2xl font-black shadow-lg hover:bg-slate-900 transition-all flex items-center justify-center gap-2"
             >
-              {loading ? <Loader2 className="animate-spin" /> : 'Entrar com E-mail'}
+              {loading ? <Loader2 className="animate-spin" /> : (isRegister ? 'Criar Conta' : 'Entrar com E-mail')}
             </button>
 
-            {(isMockMode || email === SUPER_ADMIN) && (
+            {!isRegister && !isMockMode && (
+              <button
+                type="button"
+                onClick={handleResetPassword}
+                className="w-full bg-white text-slate-600 py-3 rounded-2xl font-black border border-slate-200 hover:bg-slate-50 transition-all"
+              >
+                Esqueci minha senha
+              </button>
+            )}
+
+            {isMockMode && (
               <button 
                 type="button"
-                onClick={() => {handleDemoLogin(); console.log('Senha padrão: ' + ADMIN_PASSWORD);}}
+                onClick={handleDemoLogin}
                 className="w-full bg-indigo-600 text-white py-5 rounded-2xl font-black shadow-xl shadow-indigo-200 hover:bg-indigo-700 transition-all flex items-center justify-center gap-2 border-2 border-indigo-400"
               >
                 <ShieldCheck size={20} /> Acesso Rápido Admin
@@ -148,9 +189,22 @@ export const Login: React.FC = () => {
         </form>
 
         <div className="mt-8 text-center">
-          <p className="text-xs text-slate-400 font-bold uppercase tracking-widest">
+          <button
+            type="button"
+            onClick={() => setIsRegister((prev) => !prev)}
+            className="text-xs font-black text-indigo-600 hover:text-indigo-700 uppercase tracking-widest"
+          >
+            {isRegister ? 'Ja tenho conta, entrar' : 'Nao tenho conta, criar'}
+          </button>
+
+          <p className="text-xs text-slate-400 font-bold uppercase tracking-widest mt-4">
             {isMockMode ? "Dados salvos localmente no seu PC" : "Conectado ao Firebase Cloud"}
           </p>
+          {!isMockMode && email === SUPER_ADMIN && (
+            <p className="mt-3 text-xs font-bold text-amber-600 uppercase tracking-tight">
+              No Firebase real, o acesso depende da senha cadastrada nesse projeto. O atalho admin funciona apenas no modo demonstracao local.
+            </p>
+          )}
           {isMockMode && (
             <button
               type="button"

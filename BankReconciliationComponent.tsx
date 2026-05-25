@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { BankReconciliation, BankTransaction, Bill, BillStatus, ChartOfAccount, Supplier, TeamMember } from './types';
 import { parseUniversalBankExtract } from './cnabParser';
-import { Upload, CheckCircle, AlertCircle, Calendar, DollarSign, FileText, TrendingDown, TrendingUp, Filter, Search, Save, X, Trash2, PlusCircle } from 'lucide-react';
+import { Upload, CheckCircle, AlertCircle, Calendar, DollarSign, FileText, TrendingDown, TrendingUp, Filter, Search, Save, X, Trash2, PlusCircle, Layers } from 'lucide-react';
 import { theme } from './theme';
 import { getStatementAccountGroupKey, listSavedBankReconciliations, saveBankReconciliationVersion, StoredBankReconciliation } from './bankReconciliationStore';
 import { doesBillMatchTransaction, getBillDisplayPaidAmount, getBillOutstandingAmount, isBillFullyPaid, isBillPartiallyPaid } from './billPaymentUtils';
@@ -14,6 +14,7 @@ interface BankReconciliationProps {
   suppliers: Supplier[];
   accounts: ChartOfAccount[];
   onReconcileBill: (transaction: BankTransaction, bill: Bill) => Promise<void> | void;
+  onReconcileMultiple: (transactions: BankTransaction[], bill: Bill) => Promise<void>;
   onReopenReconciliation: (transaction: BankTransaction, bill: Bill) => Promise<void> | void;
   onCreateBillFromTransaction: (transaction: BankTransaction, accountId: string) => Promise<Bill> | Bill;
   onQuickCreateBillFromTransaction: (transaction: BankTransaction, supplierId: string, accountId: string) => Promise<Bill>;
@@ -32,6 +33,7 @@ export const BankReconciliationComponent: React.FC<BankReconciliationProps> = ({
   suppliers,
   accounts,
   onReconcileBill,
+  onReconcileMultiple,
   onReopenReconciliation,
   onCreateBillFromTransaction,
   onQuickCreateBillFromTransaction,
@@ -64,6 +66,13 @@ export const BankReconciliationComponent: React.FC<BankReconciliationProps> = ({
   const [bulkDeleteConfirm, setBulkDeleteConfirm] = useState(false);
   const [bulkDeleting, setBulkDeleting] = useState(false);
 
+  // ── Seleção múltipla para conciliação em grupo ──────────────────────────────
+  const [selectedTxIds, setSelectedTxIds] = useState<Set<string>>(new Set());
+  const [groupModalOpen, setGroupModalOpen] = useState(false);
+  const [groupBillId, setGroupBillId] = useState('');
+  const [groupBillSearch, setGroupBillSearch] = useState('');
+  const [groupReconciling, setGroupReconciling] = useState(false);
+
   const normalizeText = (value?: string) =>
     (value || '')
       .toLowerCase()
@@ -75,6 +84,38 @@ export const BankReconciliationComponent: React.FC<BankReconciliationProps> = ({
 
   const getSupplierName = (supplierId: string) => suppliers.find((supplier) => supplier.id === supplierId)?.name || '';
   const getAccountName = (accountId: string) => accounts.find((account) => account.id === accountId)?.name || '';
+
+  const isTransactionSelectable = (tx: BankTransaction) =>
+    tx.type === 'DEBIT' && !tx.reconciled && !tx.reconciledWith;
+
+  const toggleTxSelection = (id: string) =>
+    setSelectedTxIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+
+  const handleGroupReconcile = async () => {
+    const selectedTxs = (reconciliation?.transactions ?? []).filter((tx) => selectedTxIds.has(tx.id));
+    const bill = bills.find((b) => b.id === groupBillId);
+    if (!bill || selectedTxs.length === 0) return;
+    setGroupReconciling(true);
+    setError('');
+    try {
+      await onReconcileMultiple(selectedTxs, bill);
+      selectedTxs.forEach((tx) => markTransactionAsReconciled(tx, bill));
+      setSelectedTxIds(new Set());
+      setGroupModalOpen(false);
+      setGroupBillId('');
+      setGroupBillSearch('');
+      const total = selectedTxs.reduce((s, tx) => s + tx.amount, 0);
+      setSuccess(`${selectedTxs.length} lançamento(s) vinculados a "${bill.description}" — total R$ ${fmt(total)}.`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Erro ao conciliar grupo.');
+    } finally {
+      setGroupReconciling(false);
+    }
+  };
 
   const findSupplierForTransaction = (transaction: BankTransaction) => {
     const transactionText = normalizeText(transaction.counterparty || transaction.description);
@@ -759,9 +800,22 @@ export const BankReconciliationComponent: React.FC<BankReconciliationProps> = ({
       const selectedBillId = selectedBillByTransaction[transaction.id] || '';
       const selectedBill = availableBills.find((item) => item.id === selectedBillId);
 
+      const selectable = isTransactionSelectable(transaction);
+      const isSelected = selectedTxIds.has(transaction.id);
+
       return (
         <React.Fragment key={transaction.id}>
-          <tr className="hover:bg-slate-50 transition-colors">
+          <tr className={`hover:bg-slate-50 transition-colors ${isSelected ? 'bg-indigo-50' : ''}`}>
+            <td className="px-2 py-3 w-8">
+              {selectable && (
+                <input
+                  type="checkbox"
+                  checked={isSelected}
+                  onChange={() => toggleTxSelection(transaction.id)}
+                  className="w-4 h-4 rounded accent-indigo-600 cursor-pointer"
+                />
+              )}
+            </td>
             <td className="px-4 py-3 text-sm whitespace-nowrap text-slate-700 font-semibold">
               {formatDate(transaction.date)}
             </td>
@@ -864,7 +918,7 @@ export const BankReconciliationComponent: React.FC<BankReconciliationProps> = ({
 
           {transaction.type === 'DEBIT' && isExpanded && !reconciledBill && (
             <tr className="bg-slate-50/70">
-              <td colSpan={5} className="px-4 py-4">
+              <td colSpan={6} className="px-4 py-4">
                 <div className="rounded-xl border border-slate-200 bg-white p-4 space-y-4">
                   <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
                     <div>
@@ -1068,6 +1122,18 @@ export const BankReconciliationComponent: React.FC<BankReconciliationProps> = ({
       );
     });
 
+  const selectedTxList = (reconciliation?.transactions ?? []).filter((tx) => selectedTxIds.has(tx.id));
+  const selectedTotal = selectedTxList.reduce((s, tx) => s + tx.amount, 0);
+
+  const groupBillCandidates = availableBills
+    .filter((b) =>
+      groupBillSearch
+        ? normalizeText(b.description).includes(normalizeText(groupBillSearch)) ||
+          normalizeText(getSupplierName(b.supplierId)).includes(normalizeText(groupBillSearch))
+        : true
+    )
+    .sort((a, b) => Math.abs(a.amount - selectedTotal) - Math.abs(b.amount - selectedTotal));
+
   if (!user.permissions?.reconciliation) {
     return (
       <div className="flex items-center justify-center h-96">
@@ -1082,6 +1148,130 @@ export const BankReconciliationComponent: React.FC<BankReconciliationProps> = ({
 
   return (
     <div className="space-y-6 pb-12">
+
+      {/* ── Modal de conciliação em grupo ─────────────────────────────────────── */}
+      {groupModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="w-full max-w-lg bg-white rounded-2xl shadow-2xl overflow-hidden">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200 bg-slate-50">
+              <div className="flex items-center gap-2">
+                <Layers size={18} className="text-indigo-600" />
+                <h2 className="font-black text-slate-800">Conciliar {selectedTxList.length} lançamento(s) com conta</h2>
+              </div>
+              <button onClick={() => setGroupModalOpen(false)} className="text-slate-400 hover:text-slate-700">
+                <X size={20} />
+              </button>
+            </div>
+
+            <div className="px-6 py-4 space-y-4 max-h-[70vh] overflow-y-auto">
+              <div className="rounded-xl bg-indigo-50 border border-indigo-200 p-3 space-y-1">
+                <p className="text-xs font-bold text-indigo-600 uppercase tracking-widest mb-2">Lançamentos selecionados</p>
+                {selectedTxList.map((tx) => (
+                  <div key={tx.id} className="flex justify-between text-sm">
+                    <span className="text-slate-700 truncate max-w-[260px]">{tx.counterparty || tx.description}</span>
+                    <span className="font-bold text-red-600 ml-2 shrink-0">- {fmt(tx.amount)}</span>
+                  </div>
+                ))}
+                <div className="flex justify-between text-sm font-black pt-2 border-t border-indigo-200 mt-2">
+                  <span className="text-slate-800">Total</span>
+                  <span className="text-red-700">- {fmt(selectedTotal)}</span>
+                </div>
+              </div>
+
+              <div>
+                <p className="text-xs font-bold text-slate-500 uppercase tracking-widest mb-2">Escolha a conta a pagar</p>
+                <input
+                  type="text"
+                  placeholder="Buscar por descrição ou fornecedor..."
+                  value={groupBillSearch}
+                  onChange={(e) => setGroupBillSearch(e.target.value)}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 mb-3"
+                />
+                <div className="space-y-2 max-h-52 overflow-y-auto pr-1">
+                  {groupBillCandidates.slice(0, 20).map((bill) => {
+                    const diff = Math.abs(bill.amount - selectedTotal);
+                    const match = diff < 0.01;
+                    const close = diff <= bill.amount * 0.05;
+                    return (
+                      <button
+                        key={bill.id}
+                        type="button"
+                        onClick={() => setGroupBillId(bill.id)}
+                        className={`w-full text-left rounded-xl border px-3 py-2.5 transition-all ${
+                          groupBillId === bill.id
+                            ? 'border-indigo-400 bg-indigo-50'
+                            : match
+                            ? 'border-emerald-300 bg-emerald-50 hover:bg-emerald-100'
+                            : 'border-slate-200 bg-white hover:border-slate-300'
+                        }`}
+                      >
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="min-w-0">
+                            <p className="text-sm font-bold text-slate-800 truncate">{bill.description}</p>
+                            <p className="text-xs text-slate-500">{getSupplierName(bill.supplierId) || 'Sem fornecedor'} · vence {formatDate(bill.dueDate)}</p>
+                          </div>
+                          <div className="shrink-0 text-right">
+                            <p className={`text-sm font-black ${match ? 'text-emerald-700' : 'text-slate-700'}`}>{fmt(bill.amount)}</p>
+                            {match && <span className="text-[10px] font-bold text-emerald-600 bg-emerald-100 px-1.5 py-0.5 rounded-full">✓ bate</span>}
+                            {!match && close && <span className="text-[10px] font-bold text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded-full">~próximo</span>}
+                          </div>
+                        </div>
+                      </button>
+                    );
+                  })}
+                  {groupBillCandidates.length === 0 && (
+                    <p className="text-sm text-slate-400 text-center py-4">Nenhuma conta encontrada.</p>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-slate-200 bg-slate-50">
+              <button
+                onClick={() => { setGroupModalOpen(false); setGroupBillId(''); setGroupBillSearch(''); }}
+                className="px-4 py-2 rounded-xl border border-slate-200 text-slate-600 font-bold text-sm hover:bg-slate-100"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={handleGroupReconcile}
+                disabled={!groupBillId || groupReconciling}
+                className="px-5 py-2 rounded-xl bg-indigo-600 text-white font-bold text-sm hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+              >
+                <CheckCircle size={16} />
+                {groupReconciling ? 'Conciliando...' : 'Confirmar Conciliação'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Barra de seleção múltipla ─────────────────────────────────────────── */}
+      {selectedTxIds.size > 0 && (
+        <div className="sticky top-0 z-20 flex items-center justify-between gap-4 rounded-2xl border border-indigo-300 bg-indigo-600 px-5 py-3 shadow-lg text-white">
+          <div className="flex items-center gap-3">
+            <Layers size={18} />
+            <span className="font-black text-sm">
+              {selectedTxIds.size} lançamento(s) selecionado(s) · <span className="text-indigo-200">- {fmt(selectedTotal)}</span>
+            </span>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setSelectedTxIds(new Set())}
+              className="px-3 py-1.5 rounded-lg border border-indigo-400 text-indigo-100 text-xs font-bold hover:bg-indigo-700"
+            >
+              Limpar seleção
+            </button>
+            <button
+              onClick={() => { setGroupBillId(''); setGroupBillSearch(''); setGroupModalOpen(true); }}
+              className="px-4 py-1.5 rounded-lg bg-white text-indigo-700 text-xs font-black hover:bg-indigo-50 flex items-center gap-1.5"
+            >
+              <CheckCircle size={14} /> Conciliar com conta ▶
+            </button>
+          </div>
+        </div>
+      )}
+
       <div>
         <h1 className="text-4xl font-black tracking-tight" style={{ color: theme.colors.neutral.black }}>
           Extrato Bancario
@@ -1433,6 +1623,7 @@ export const BankReconciliationComponent: React.FC<BankReconciliationProps> = ({
                   <table className="w-full">
                     <thead className="bg-slate-100 sticky top-0 z-10">
                       <tr>
+                        <th className="px-2 py-3 w-8"></th>
                         <th className="px-4 py-3 text-left text-xs font-bold text-slate-600 uppercase">Data</th>
                         <th className="px-4 py-3 text-left text-xs font-bold text-slate-600 uppercase">Descricao</th>
                         <th className="px-4 py-3 text-center text-xs font-bold text-slate-600 uppercase">Tipo</th>
@@ -1492,6 +1683,7 @@ export const BankReconciliationComponent: React.FC<BankReconciliationProps> = ({
                   <table className="w-full">
                     <thead className="bg-slate-100">
                       <tr>
+                        <th className="px-2 py-3 w-8"></th>
                         <th className="px-4 py-3 text-left text-xs font-bold text-slate-600 uppercase">Data</th>
                         <th className="px-4 py-3 text-left text-xs font-bold text-slate-600 uppercase">Descricao</th>
                         <th className="px-4 py-3 text-center text-xs font-bold text-slate-600 uppercase">Tipo</th>

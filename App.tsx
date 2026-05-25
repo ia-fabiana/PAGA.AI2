@@ -1545,6 +1545,53 @@ const App: React.FC = () => {
     await saveBill(normalizedBill);
   };
 
+  const handleBulkBankTransactionBillReconcile = async (transactions: BankTransaction[], bill: Bill) => {
+    const conflict = transactions.find((tx) =>
+      bills.some((item) => item.id !== bill.id && getBillBankMatches(item).some((m) => m.transactionId === tx.id))
+    );
+    if (conflict) throw new Error(`Lancamento ${conflict.description} ja conciliado com outra conta.`);
+
+    const existingMatches = getBillBankMatches(bill).filter(
+      (m) => !transactions.some((tx) => tx.id === m.transactionId)
+    );
+    const newMatches = transactions.map((tx) => ({
+      transactionId: tx.id,
+      date: tx.date,
+      amount: tx.amount,
+      reference: tx.reference,
+      description: tx.description,
+      document: tx.document,
+      counterparty: tx.counterparty,
+      reconciledAt: new Date().toISOString(),
+      reconciledBy: user?.email ?? '',
+    }));
+    const nextBankMatches = [...existingMatches, ...newMatches].sort((a, b) => a.date.localeCompare(b.date));
+    const totalPaid = nextBankMatches.reduce((sum, m) => sum + m.amount, 0);
+    const latestPaidDate = nextBankMatches[nextBankMatches.length - 1]?.date;
+    const isFullyPaid = totalPaid >= bill.amount - 0.01;
+    const last = transactions[transactions.length - 1];
+    const updatedBill = normalizeBillPaymentSource({
+      ...bill,
+      bankMatches: nextBankMatches,
+      paidDate: isFullyPaid ? latestPaidDate : undefined,
+      paidAmount: totalPaid,
+      interestAmount: isFullyPaid ? totalPaid - bill.amount : undefined,
+      paymentSource: 'bank',
+      paymentBankTransactionId: last.id,
+      paymentBankReference: last.reference,
+      paymentBankDescription: last.description,
+      paymentBankDocument: last.document,
+      status: isFullyPaid ? BillStatus.PAID : BillStatus.PENDING,
+    });
+    if (isMockMode) {
+      setBills((prev) => prev.map((item) => (item.id === updatedBill.id ? updatedBill : item)));
+      return;
+    }
+    if (!user) throw new Error('Usuario nao autenticado.');
+    const saved = await saveBill(updatedBill);
+    if (!saved) throw new Error('Nao foi possivel salvar a conciliacao em grupo.');
+  };
+
   const handleBankTransactionBillReconcile = async (transaction: BankTransaction, bill: Bill) => {
     const alreadyLinkedBill = bills.find(
       (item) =>
@@ -2070,6 +2117,7 @@ const App: React.FC = () => {
                 suppliers={suppliers}
                 accounts={accounts}
                 onReconcileBill={handleBankTransactionBillReconcile}
+                onReconcileMultiple={handleBulkBankTransactionBillReconcile}
                 onReopenReconciliation={handleReopenTransactionBillReconciliation}
                 onCreateBillFromTransaction={handleCreateBillFromBankTransaction}
                 onQuickCreateBillFromTransaction={handleQuickCreateBillFromBankTransaction}
