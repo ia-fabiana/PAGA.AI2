@@ -1334,6 +1334,37 @@ const App: React.FC = () => {
     }
   };
 
+  const handleBulkCaixaPequenoImport = async (rows: Array<{ id: string; date: string; description: string; amount: number; accountId: string }>) => {
+    const billsRef = getSharedBillsRef();
+    const existingIds = new Set(bills.map(b => b.id));
+    const newBills: Bill[] = rows
+      .filter(r => !existingIds.has(r.id))
+      .map(r => ({
+        id: r.id,
+        supplierId: '',
+        description: r.description,
+        amount: r.amount,
+        dueDate: r.date,
+        paidDate: r.date,
+        paidAmount: r.amount,
+        status: BillStatus.PAID,
+        paymentSource: 'caixa_pequeno' as const,
+        accountId: r.accountId,
+        recurrenceType: 'none' as RecurrenceType,
+        launchedBy: user?.email || '',
+        isEstimate: false,
+      }));
+    setBills(prev => [...prev, ...newBills]);
+    if (!isMockMode && user && newBills.length > 0) {
+      const batch = writeBatch(db);
+      for (const b of newBills) {
+        batch.set(doc(billsRef, b.id), b);
+      }
+      await batch.commit().catch(e => console.error('Erro ao importar caixa pequeno em lote:', e));
+    }
+    return newBills.length;
+  };
+
   const stripUndefined = <T,>(value: T): T => {
     if (Array.isArray(value)) {
       return value
@@ -2176,6 +2207,7 @@ const App: React.FC = () => {
                 config={caixaPequenoConfig}
                 onSaveConfig={handleSaveCaixaPequenoConfig}
                 onCreateExpense={handleCaixaPequenoExpense}
+                onBulkImportExpenses={handleBulkCaixaPequenoImport}
               />
             )}
             {view === 'team' && <TeamManagement team={team} setTeam={setTeamWithPersist} canManage={isEditor(currentUser.permissions?.team)} accounts={accounts} onResyncAccess={handleResyncWorkspaceAccess} />}

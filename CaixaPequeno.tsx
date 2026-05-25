@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useMemo } from 'react';
-import { Wallet, TrendingUp, TrendingDown, Settings, Save, Filter, X, PlusCircle, CheckCircle } from 'lucide-react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
+import { Wallet, TrendingUp, TrendingDown, Settings, Save, Filter, X, PlusCircle, CheckCircle, Upload } from 'lucide-react';
 import { carregarTransacoesSalvas } from './trinks';
 import { Bill, CaixaPequenoConfig, ChartOfAccount } from './types';
 import { getBillDisplayPaidDate, getBillDisplayPaidAmount, isBillFullyPaid } from './billPaymentUtils';
@@ -12,12 +12,21 @@ interface ExpenseEntry {
   accountId: string;
 }
 
+interface CsvRow {
+  id: string;
+  date: string;
+  description: string;
+  amount: number;
+  accountId: string;
+}
+
 interface Props {
   bills: Bill[];
   accounts: ChartOfAccount[];
   config: CaixaPequenoConfig;
   onSaveConfig: (config: CaixaPequenoConfig) => void;
   onCreateExpense: (expense: ExpenseEntry) => Promise<void>;
+  onBulkImportExpenses?: (rows: CsvRow[]) => Promise<number>;
 }
 
 function fmt(v: number) {
@@ -38,7 +47,61 @@ interface Movement {
   source: 'trinks' | 'bill';
 }
 
-export const CaixaPequeno: React.FC<Props> = ({ bills, accounts, config, onSaveConfig, onCreateExpense }) => {
+function parseCsvText(text: string): string[][] {
+  const rows: string[][] = [];
+  for (const rawLine of text.split('\n')) {
+    const line = rawLine.trimEnd();
+    if (!line) continue;
+    const cols: string[] = [];
+    let cur = '';
+    let inQ = false;
+    for (const ch of line) {
+      if (ch === '"') { inQ = !inQ; }
+      else if (ch === ',' && !inQ) { cols.push(cur); cur = ''; }
+      else { cur += ch; }
+    }
+    cols.push(cur);
+    rows.push(cols.map(c => c.trim().replace(/^"|"$/g, '')));
+  }
+  return rows;
+}
+
+function parseCsvDate(s: string): string | null {
+  const m = s.trim().match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})$/);
+  if (!m) return null;
+  const year = m[3].length === 2 ? '20' + m[3] : m[3];
+  return `${year}-${m[2].padStart(2, '0')}-${m[1].padStart(2, '0')}`;
+}
+
+function parseBrFloat2(s: string): number {
+  if (!s) return 0;
+  return parseFloat(s.replace(/\./g, '').replace(',', '.')) || 0;
+}
+
+function csvHash(str: string): string {
+  let h = 0;
+  for (let i = 0; i < str.length; i++) {
+    h = Math.imul(31, h) + str.charCodeAt(i) | 0;
+  }
+  return Math.abs(h).toString(36).padStart(6, '0');
+}
+
+function extractCsvRows(text: string, defaultAccountId: string): CsvRow[] {
+  const matrix = parseCsvText(text);
+  const result: CsvRow[] = [];
+  for (const cols of matrix) {
+    const dateISO = parseCsvDate(cols[0] ?? '');
+    if (!dateISO) continue;
+    const amount = parseBrFloat2(cols[2] ?? '');
+    if (!amount || amount <= 0) continue;
+    const description = (cols[1] ?? '').trim() || 'Lançamento';
+    const id = `cxp-hist-${dateISO.replace(/-/g, '')}-${csvHash(dateISO + description + amount)}`;
+    result.push({ id, date: dateISO, description, amount, accountId: defaultAccountId });
+  }
+  return result;
+}
+
+export const CaixaPequeno: React.FC<Props> = ({ bills, accounts, config, onSaveConfig, onCreateExpense, onBulkImportExpenses }) => {
   const now = new Date();
   const defaultFrom = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0];
   const defaultTo = new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().split('T')[0];
@@ -60,6 +123,14 @@ export const CaixaPequeno: React.FC<Props> = ({ bills, accounts, config, onSaveC
   const [expAccountId, setExpAccountId] = useState(accounts[0]?.id || '');
   const [expSaving, setExpSaving] = useState(false);
   const [expSaved, setExpSaved] = useState(false);
+
+  const [showImport, setShowImport] = useState(false);
+  const [csvRows, setCsvRows] = useState<CsvRow[]>([]);
+  const [csvImportAccountId, setCsvImportAccountId] = useState(accounts[0]?.id || '');
+  const [csvImporting, setCsvImporting] = useState(false);
+  const [csvDone, setCsvDone] = useState<number | null>(null);
+  const [csvError, setCsvError] = useState('');
+  const csvInputRef = useRef<HTMLInputElement>(null);
 
   // Load from saldoInicialData up to dateTo so running balance is always correct
   useEffect(() => {
@@ -159,6 +230,39 @@ export const CaixaPequeno: React.FC<Props> = ({ bills, accounts, config, onSaveC
     });
   }, [movements, allMovements, config.saldoInicial, dateFrom]);
 
+  const handleCsvFile = (file: File) => {
+    setCsvDone(null);
+    setCsvError('');
+    const reader = new FileReader();
+    reader.onload = e => {
+      const text = (e.target?.result as string) || '';
+      const rows = extractCsvRows(text, csvImportAccountId);
+      if (rows.length === 0) {
+        setCsvError('Nenhuma linha válida encontrada. O CSV deve ter colunas: DATA (DD/MM/AA), DESCRIÇÃO, VALOR.');
+        setCsvRows([]);
+      } else {
+        setCsvRows(rows);
+        setCsvError('');
+      }
+    };
+    reader.readAsText(file, 'UTF-8');
+  };
+
+  const handleCsvImport = async () => {
+    if (!onBulkImportExpenses || csvRows.length === 0) return;
+    setCsvImporting(true);
+    try {
+      const rowsWithAccount = csvRows.map(r => ({ ...r, accountId: csvImportAccountId || r.accountId }));
+      const count = await onBulkImportExpenses(rowsWithAccount);
+      setCsvDone(count);
+      setCsvRows([]);
+    } catch (e: any) {
+      setCsvError(e?.message || 'Erro ao importar');
+    } finally {
+      setCsvImporting(false);
+    }
+  };
+
   const handleSaveConfig = () => {
     const val = parseFloat(draftSaldo.replace(/\./g, '').replace(',', '.')) || 0;
     onSaveConfig({ saldoInicial: val, saldoInicialData: draftData });
@@ -242,6 +346,16 @@ export const CaixaPequeno: React.FC<Props> = ({ bills, accounts, config, onSaveC
         <div className="flex items-center gap-2 mb-4">
           <PlusCircle size={16} className="text-amber-500" />
           <h3 className="text-sm font-black text-slate-700 uppercase tracking-widest">Novo Lançamento de Saída</h3>
+          <span className="flex-1" />
+          {onBulkImportExpenses && (
+            <button
+              onClick={() => { setShowImport(v => !v); setCsvRows([]); setCsvDone(null); setCsvError(''); }}
+              className="flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-xl bg-slate-100 text-slate-500 hover:bg-slate-200 uppercase transition-colors"
+            >
+              <Upload size={12} />
+              Importar CSV
+            </button>
+          )}
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
           <div>
@@ -306,6 +420,69 @@ export const CaixaPequeno: React.FC<Props> = ({ bills, accounts, config, onSaveC
             </div>
           )}
         </div>
+
+        {showImport && (
+          <div className="mt-4 pt-4 border-t border-slate-100 space-y-3">
+            <p className="text-xs font-bold text-slate-400 uppercase">Importar histórico via CSV</p>
+            <p className="text-xs text-slate-400">Exporte sua planilha como CSV com colunas: <strong>DATA (DD/MM/AA)</strong>, <strong>DESCRIÇÃO</strong>, <strong>VALOR</strong>.</p>
+            <div className="flex flex-wrap items-end gap-3">
+              <div>
+                <p className="text-[11px] font-bold text-slate-400 uppercase mb-1">Centro de Custo padrão</p>
+                <select
+                  value={csvImportAccountId}
+                  onChange={e => setCsvImportAccountId(e.target.value)}
+                  className="border border-slate-200 rounded-xl px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-amber-400 bg-white"
+                >
+                  <option value="">— Nenhum —</option>
+                  {accounts.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+                </select>
+              </div>
+              <input
+                ref={csvInputRef}
+                type="file"
+                accept=".csv,text/csv"
+                className="hidden"
+                onChange={e => { const f = e.target.files?.[0]; if (f) handleCsvFile(f); e.target.value = ''; }}
+              />
+              <button
+                onClick={() => csvInputRef.current?.click()}
+                className="flex items-center gap-1.5 text-xs font-bold px-4 py-2 rounded-xl bg-slate-100 text-slate-600 hover:bg-slate-200 uppercase transition-colors"
+              >
+                <Upload size={13} />
+                Selecionar arquivo
+              </button>
+            </div>
+            {csvError && <p className="text-xs text-red-500 font-medium">{csvError}</p>}
+            {csvRows.length > 0 && (
+              <div className="space-y-2">
+                <p className="text-xs font-bold text-slate-500">{csvRows.length} lançamento(s) encontrado(s) — pré-visualização:</p>
+                <div className="max-h-48 overflow-y-auto border border-slate-100 rounded-xl divide-y divide-slate-50">
+                  {csvRows.map(r => (
+                    <div key={r.id} className="grid grid-cols-3 px-3 py-2 text-xs text-slate-600">
+                      <span>{fmtDate(r.date)}</span>
+                      <span className="truncate">{r.description}</span>
+                      <span className="text-right font-bold text-red-500">-{fmt(r.amount)}</span>
+                    </div>
+                  ))}
+                </div>
+                <button
+                  onClick={handleCsvImport}
+                  disabled={csvImporting}
+                  className="flex items-center gap-2 text-sm font-bold px-5 py-2 rounded-xl uppercase transition-all bg-amber-500 text-white hover:bg-amber-600 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <Upload size={14} />
+                  {csvImporting ? 'Importando...' : `Importar ${csvRows.length} lançamento(s)`}
+                </button>
+              </div>
+            )}
+            {csvDone !== null && (
+              <div className="flex items-center gap-1.5 text-sm font-bold text-emerald-600">
+                <CheckCircle size={15} />
+                {csvDone} lançamento(s) importado(s) com sucesso!
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       {/* KPI cards */}

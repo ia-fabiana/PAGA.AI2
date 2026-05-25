@@ -21,7 +21,8 @@ function parseDate(s: string): string | null {
 }
 
 async function sha1Slice8(str: string): Promise<string> {
-  const data = new TextEncoder().encode(str);
+  // Use latin1 byte encoding (charCodeAt low byte) to match Node.js latin1 file reads.
+  const data = Uint8Array.from(str, c => c.charCodeAt(0) & 0xFF);
   const buf = await crypto.subtle.digest('SHA-1', data);
   return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('').slice(0, 8);
 }
@@ -54,7 +55,8 @@ async function rowToTransaction(row: string[]): Promise<Record<string, unknown> 
   if (prePago > 0) formasPagamentos.push({ nome: 'Pré-Pago', valor: prePago, parcelas: 1 });
   if (outros > 0) formasPagamentos.push({ nome: 'Outros', valor: outros, parcelas: 1 });
 
-  const hash = await sha1Slice8(`${dateAtend}_${dataPag}_${clientId}_${total}`);
+  // Use only datePag (date part, not timestamp) so docId is stable across different CSV exports.
+  const hash = await sha1Slice8(`${dateAtend}_${datePag}_${clientId}_${total}`);
   const docId = `trinks_${ESTABLISHMENT_ID}_csv_${hash}`;
 
   return {
@@ -120,17 +122,6 @@ export const TrinksUpload: React.FC<Props> = ({ onComplete }) => {
         setMessage('Nenhuma transação de Pagamento encontrada no arquivo.');
         return;
       }
-
-      // Delete existing docs for this period before re-importing (avoids duplicate docIds)
-      const dates = (transactions.map(t => t.date as string)).filter(Boolean).sort();
-      const minDate = dates[0];
-      const maxDate = dates[dates.length - 1];
-      setMessage(`Limpando período ${minDate} → ${maxDate}...`);
-      const delRes = await fetch(`/api/import-trinks-transactions?date_from=${minDate}&date_to=${maxDate}&include_csv=true`, {
-        method: 'DELETE',
-        headers: { 'x-api-key': IMPORT_SECRET },
-      });
-      if (!delRes.ok) throw new Error(`Erro ao limpar período: ${await delRes.text()}`);
 
       setStatus('uploading');
       const BATCH = 100;

@@ -76,7 +76,7 @@ function rowToTransaction(row) {
   if (outros > 0) formasPagamentos.push({ nome: 'Outros', valor: outros, parcelas: 1 });
 
   const hash = createHash('sha1')
-    .update(`${dateAtend}_${dataPag}_${clientId}_${total}`)
+    .update(`${dateAtend}_${datePag}_${clientId}_${total}`, 'latin1')
     .digest('hex')
     .slice(0, 8);
   const docId = `trinks_${ESTABLISHMENT_ID}_csv_${hash}`;
