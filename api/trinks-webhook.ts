@@ -1,22 +1,22 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import * as admin from 'firebase-admin';
+import { initializeApp, getApps, cert } from 'firebase-admin/app';
+import { getFirestore } from 'firebase-admin/firestore';
 
 const ESTABLISHMENT_ID = process.env.VITE_TRINKS_ESTABLISHMENT_ID ?? '';
 
-function getDb(): admin.firestore.Firestore {
-  if (!admin.apps.length) {
-    admin.initializeApp({
-      credential: admin.credential.cert({
-        projectId: process.env.FIREBASE_PROJECT_ID,
-        clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
-        privateKey: process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, '\n'),
+function getDb() {
+  if (!getApps().length) {
+    initializeApp({
+      credential: cert({
+        projectId: process.env.FIREBASE_PROJECT_ID?.trim(),
+        clientEmail: process.env.FIREBASE_CLIENT_EMAIL?.trim(),
+        privateKey: process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, '\n').trim(),
       }),
     });
   }
-  return admin.firestore();
+  return getFirestore();
 }
 
-// Formato enviado pelo ia-agendamento após processar o SNS do Trinks
 interface IaAgendamentoPayload {
   source: 'ia-agendamento';
   eventType: 'create' | 'reschedule' | 'cancel';
@@ -55,7 +55,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const body = req.body as Record<string, unknown>;
   const relaySource = req.headers['x-relay-source'];
 
-  // Payload vindo do ia-agendamento (já processado, formato limpo)
   if (relaySource === 'ia-agendamento' || body?.source === 'ia-agendamento') {
     try {
       const payload = body as unknown as IaAgendamentoPayload;
@@ -68,7 +67,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
   }
 
-  // Fallback: payload SNS direto do Trinks (caso a URL seja configurada diretamente no futuro)
   const snsType = String(body?.Type ?? '');
   if (snsType === 'SubscriptionConfirmation') {
     const subscribeUrl = String(body?.SubscribeURL ?? '');
