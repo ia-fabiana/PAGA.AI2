@@ -531,7 +531,7 @@ export const BankReconciliationComponent: React.FC<BankReconciliationProps> = ({
   }, {} as Record<string, { key: string; label: string; transactions: typeof filteredTransactions; credits: number; debits: number }>);
 
   const groupedTransactionList = Object.values(groupedTransactions)
-    .map(group => ({
+    .map((group: { key: string; label: string; transactions: typeof filteredTransactions; credits: number; debits: number }) => ({
       ...group,
       balance: group.credits - group.debits,
       transactions: group.transactions.sort((a, b) => b.date.localeCompare(a.date)),
@@ -547,7 +547,7 @@ export const BankReconciliationComponent: React.FC<BankReconciliationProps> = ({
       groups[groupKey].push(statement);
       return groups;
     }, {} as Record<string, StoredBankReconciliation[]>)
-  ).map((statements) => {
+  ).map((statements: StoredBankReconciliation[]) => {
     const hydratedStatements = statements.map((statement) => hydrateStatementWithBillMatches(statement));
     const statementsByMonth = [...hydratedStatements].sort((a, b) => a.startDate.localeCompare(b.startDate));
     const latestStatement = [...hydratedStatements].sort((a, b) => {
