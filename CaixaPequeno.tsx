@@ -384,16 +384,18 @@ export const CaixaPequeno: React.FC<Props> = ({ bills, accounts, config, onSaveC
           <div className="py-12 text-center text-slate-400 text-sm">Nenhuma movimentação no período.</div>
         ) : (
           <div className="divide-y divide-slate-50">
-            {/* Saldo inicial */}
-            <div className="grid grid-cols-12 items-center px-6 py-3 bg-amber-50">
-              <div className="col-span-2 text-xs font-semibold text-slate-500">{fmtDate(config.saldoInicialData)}</div>
-              <div className="col-span-1">
-                <span className="text-[10px] font-black bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full uppercase">Inicial</span>
+            {/* Saldo inicial — só aparece quando o período filtrado inclui a data de saldo inicial */}
+            {config.saldoInicialData >= dateFrom && config.saldoInicialData <= dateTo && (
+              <div className="grid grid-cols-12 items-center px-6 py-3 bg-amber-50">
+                <div className="col-span-2 text-xs font-semibold text-slate-500">{fmtDate(config.saldoInicialData)}</div>
+                <div className="col-span-1">
+                  <span className="text-[10px] font-black bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full uppercase">Inicial</span>
+                </div>
+                <div className="col-span-5 text-sm text-slate-500 pl-2">Saldo inicial</div>
+                <div className="col-span-2 text-sm font-bold text-right text-amber-600">{fmt(config.saldoInicial)}</div>
+                <div className="col-span-2 text-sm font-black text-right text-amber-700">{fmt(config.saldoInicial)}</div>
               </div>
-              <div className="col-span-5 text-sm text-slate-500 pl-2">Saldo inicial</div>
-              <div className="col-span-2 text-sm font-bold text-right text-amber-600">{fmt(config.saldoInicial)}</div>
-              <div className="col-span-2 text-sm font-black text-right text-amber-700">{fmt(config.saldoInicial)}</div>
-            </div>
+            )}
             {movementsWithBalance.map((m, i) => (
               <div key={i} className="grid grid-cols-12 items-center px-6 py-3 hover:bg-slate-50 transition-colors">
                 <div className="col-span-2 text-xs font-semibold text-slate-500">{fmtDate(m.date)}</div>
