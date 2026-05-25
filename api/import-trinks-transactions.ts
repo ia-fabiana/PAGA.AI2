@@ -16,13 +16,25 @@ function getDb() {
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
-
   const apiKey = req.headers['x-api-key'];
   const expectedSecret = process.env.TRINKS_IMPORT_SECRET?.trim();
   if (!apiKey || !expectedSecret || apiKey !== expectedSecret) {
     return res.status(401).json({ error: 'Unauthorized' });
   }
+
+  if (req.method === 'GET') {
+    const db = getDb();
+    const from = (req.query.date_from as string) || '2026-01-01';
+    const to = (req.query.date_to as string) || '2026-12-31';
+    const snap = await db.collection('trinks_transactions')
+      .where('date', '>=', from)
+      .where('date', '<=', to)
+      .orderBy('date', 'asc')
+      .get();
+    return res.status(200).json({ count: snap.size, from, to });
+  }
+
+  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
   const body = req.body as { transactions?: unknown[] };
   if (!Array.isArray(body?.transactions)) {

@@ -525,18 +525,18 @@ export const TrinksReconciliation: React.FC<Props> = ({ user, onBack, onShowCash
                                             </td>
                                             <td className="px-3 py-2 text-slate-600">
                                               {[
-                                                ...t.servicos.map(s => s.nome),
-                                                ...t.produtos.map(p => p.nome),
+                                                ...(t.servicos || []).map(s => s.nome),
+                                                ...(t.produtos || []).map(p => p.nome),
                                               ].join(', ') || '—'}
                                             </td>
                                             <td className="px-3 py-2">
                                               <div className="flex flex-col gap-0.5">
-                                                {t.formasPagamentos.map((fp, i) => (
+                                                {(t.formasPagamentos || []).map((fp, i) => (
                                                   <span key={i} className="text-indigo-600">
                                                     {fp.nome}: R$ {fmt(fp.valor)}
                                                   </span>
                                                 ))}
-                                                {t.formasPagamentos.length === 0 && (
+                                                {(t.formasPagamentos || []).length === 0 && (
                                                   <span className="text-slate-400">Sem pagamento</span>
                                                 )}
                                               </div>

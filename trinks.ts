@@ -228,7 +228,7 @@ export function agregarPorDia(transacoes: TrinksTransacaoSalva[]): TotaisDiaTrin
     const dia = byDate[t.date];
     dia.transacoes++;
 
-    for (const fp of t.formasPagamentos) {
+    for (const fp of (t.formasPagamentos || [])) {
       const col = mapFormaPagamento(fp.nome);
       dia[col] += fp.valor;
       dia.detalhes[fp.nome] = (dia.detalhes[fp.nome] ?? 0) + fp.valor;

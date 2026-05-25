@@ -53,6 +53,8 @@ function rowToTransaction(row) {
   if (!dateAtend) return null;
 
   const dataPag = row[1].trim(); // "06/01/2026 10:14"
+  // Use payment date as `date` so dashboard matches Trinks "Data de Pagamento" reports
+  const datePag = parseDate(dataPag.split(' ')[0]) || dateAtend;
   const clientId = row[3].trim();
   const clientName = row[4].trim();
   const total = parseBrFloat(row[23]);
@@ -92,7 +94,7 @@ function rowToTransaction(row) {
     servicos: [],
     produtos: [],
     pacotes: [],
-    date: dateAtend,
+    date: datePag,
     syncedAt: new Date().toISOString(),
     estabelecimentoId: ESTABLISHMENT_ID,
     importSource: 'csv',
