@@ -14,10 +14,11 @@ import { CashBox } from './CashBox';
 import { CashBoxReport } from './CashBoxReport';
 import { BankReconciliationComponent } from './BankReconciliationComponent';
 import { TrinksReconciliation } from './TrinksReconciliation';
+import { CaixaPequeno } from './CaixaPequeno';
 
 import { Login } from './Login';
 import { auth, db, isMockMode } from './firebase';
-import { BankTransaction, Bill, BillBankMatch, Supplier, BillStatus, UserRole, TeamMember, Company, ChartOfAccount, Revenue, RecurrenceType, ModulePermissions } from './types';
+import { BankTransaction, Bill, BillBankMatch, Supplier, BillStatus, UserRole, TeamMember, Company, ChartOfAccount, Revenue, RecurrenceType, ModulePermissions, CaixaPequenoConfig } from './types';
 import { collection, doc, onSnapshot, setDoc, deleteDoc, updateDoc, writeBatch, getDocs, getDoc } from 'firebase/firestore';
 import { Loader2 } from 'lucide-react';
 import { doesBankMatchTransaction, getBillBankMatches, getBillBankPaidAmount, getBillLastBankPaymentDate } from './billPaymentUtils';
@@ -27,7 +28,7 @@ const SHARED_WORKSPACE_ID = 'paga-ai2-shared';
 const App: React.FC = () => {
   const [user, setUser] = useState<any>(null);
   const [loading, setLoading] = useState(true);
-  const [view, setView] = useState<'dashboard' | 'bills' | 'suppliers' | 'revenues' | 'team' | 'profile' | 'accounts' | 'dre' | 'cashbox' | 'cashbox-report' | 'cashbox-entry' | 'reconciliation'>('dashboard');
+  const [view, setView] = useState<'dashboard' | 'bills' | 'suppliers' | 'revenues' | 'team' | 'profile' | 'accounts' | 'dre' | 'cashbox' | 'cashbox-report' | 'cashbox-entry' | 'reconciliation' | 'caixa-pequeno'>('dashboard');
   
   const [bills, setBills] = useState<Bill[]>([]);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
@@ -37,6 +38,7 @@ const App: React.FC = () => {
   const [firestoreError, setFirestoreError] = useState<string>('');
   const defaultCompany: Company = { name: 'Unidade Vila Leopoldina', taxId: '', email: '', phone: '', address: '' };
   const [company, setCompany] = useState<Company>(defaultCompany);
+  const [caixaPequenoConfig, setCaixaPequenoConfig] = useState<CaixaPequenoConfig>({ saldoInicial: 0, saldoInicialData: '2026-01-01' });
 
   const [showBillForm, setShowBillForm] = useState(false);
   const [editingBill, setEditingBill] = useState<Bill | undefined>(undefined);
@@ -60,6 +62,7 @@ const App: React.FC = () => {
   const getSharedCompanyRef = () => doc(db, 'workspaces', SHARED_WORKSPACE_ID, 'meta', 'company');
   const getSharedSettingsRef = () => doc(db, 'workspaces', SHARED_WORKSPACE_ID, 'meta', 'settings');
   const getSharedAccessRef = () => doc(db, 'workspaces', SHARED_WORKSPACE_ID, 'meta', 'access');
+  const getSharedCaixaPequenoRef = () => doc(db, 'workspaces', SHARED_WORKSPACE_ID, 'meta', 'caixaPequeno');
 
   const LED10_ACCOUNT_ID = '22';
 
@@ -1204,6 +1207,11 @@ const App: React.FC = () => {
       markLoaded();
     }, handleSnapshotError);
 
+    const caixaPequenoRef = getSharedCaixaPequenoRef();
+    const unsubCaixaPequeno = onSnapshot(caixaPequenoRef, (snap) => {
+      if (snap.exists()) setCaixaPequenoConfig(snap.data() as CaixaPequenoConfig);
+    }, () => {});
+
     return () => {
       unsubBills();
       unsubSuppliers();
@@ -1211,6 +1219,7 @@ const App: React.FC = () => {
       unsubRevenues();
       unsubTeam();
       unsubCompany();
+      unsubCaixaPequeno();
     };
   }, [isMockMode, user]);
 
@@ -1294,6 +1303,35 @@ const App: React.FC = () => {
     if (isMockMode || !user) return;
     const companyRef = getSharedCompanyRef();
     setDoc(companyRef, next, { merge: true }).catch((e) => console.error('Erro ao salvar empresa:', e));
+  };
+
+  const handleSaveCaixaPequenoConfig = (next: CaixaPequenoConfig) => {
+    setCaixaPequenoConfig(next);
+    if (isMockMode || !user) return;
+    setDoc(getSharedCaixaPequenoRef(), next, { merge: true }).catch(e => console.error('Erro ao salvar caixaPequeno:', e));
+  };
+
+  const handleCaixaPequenoExpense = async (expense: { date: string; description: string; amount: number; accountId: string }) => {
+    const newBill: Bill = {
+      id: `cxp-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+      supplierId: '',
+      description: expense.description,
+      amount: expense.amount,
+      dueDate: expense.date,
+      paidDate: expense.date,
+      paidAmount: expense.amount,
+      status: BillStatus.PAID,
+      paymentSource: 'caixa_pequeno',
+      accountId: expense.accountId,
+      recurrenceType: 'none' as RecurrenceType,
+      launchedBy: user?.email || '',
+      isEstimate: false,
+    };
+    setBills(prev => [...prev, newBill]);
+    if (!isMockMode && user) {
+      const billsRef = getSharedBillsRef();
+      await setDoc(doc(billsRef, newBill.id), newBill).catch(e => console.error('Erro ao salvar despesa caixa pequeno:', e));
+    }
   };
 
   const stripUndefined = <T,>(value: T): T => {
@@ -1925,6 +1963,9 @@ const App: React.FC = () => {
       if (targetView === 'cashbox-entry') {
         return hasAccess(resolvedPermissions.cashbox);
       }
+      if (targetView === 'caixa-pequeno') {
+        return hasAccess(resolvedPermissions.cashbox);
+      }
       const permissionKey = targetView as keyof typeof resolvedPermissions;
       return hasAccess(resolvedPermissions[permissionKey] as string | boolean | undefined);
     };
@@ -1991,6 +2032,9 @@ const App: React.FC = () => {
     if (targetView === 'cashbox-entry') {
       return hasAccess(currentUser.permissions.cashbox);
     }
+    if (targetView === 'caixa-pequeno') {
+      return hasAccess(currentUser.permissions.cashbox);
+    }
     const permissionKey = targetView as keyof typeof currentUser.permissions;
     return hasAccess(currentUser.permissions[permissionKey] as string | boolean | undefined);
   };
@@ -2019,6 +2063,7 @@ const App: React.FC = () => {
     'cashbox-report': 'Relatorio de Caixa',
     'cashbox-entry': 'Lancamentos Caixa',
     reconciliation: 'Extrato Bancario',
+    'caixa-pequeno': 'Caixa Pequeno',
   };
 
   return (
@@ -2122,6 +2167,15 @@ const App: React.FC = () => {
                 onCreateBillFromTransaction={handleCreateBillFromBankTransaction}
                 onQuickCreateBillFromTransaction={handleQuickCreateBillFromBankTransaction}
                 onBulkDeleteBillsByDateRange={handleBulkDeleteBillsByDateRange}
+              />
+            )}
+            {view === 'caixa-pequeno' && (
+              <CaixaPequeno
+                bills={bills}
+                accounts={accounts}
+                config={caixaPequenoConfig}
+                onSaveConfig={handleSaveCaixaPequenoConfig}
+                onCreateExpense={handleCaixaPequenoExpense}
               />
             )}
             {view === 'team' && <TeamManagement team={team} setTeam={setTeamWithPersist} canManage={isEditor(currentUser.permissions?.team)} accounts={accounts} onResyncAccess={handleResyncWorkspaceAccess} />}

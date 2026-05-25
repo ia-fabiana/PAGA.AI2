@@ -56,6 +56,7 @@ export const BillList: React.FC<BillListProps> = ({
   const [pdfPreviewUrl, setPdfPreviewUrl] = useState('');
   const [sortBy, setSortBy] = useState<'dueDate' | 'paidDate' | 'amount' | 'supplier'>('dueDate');
   const [paidAmountInputs, setPaidAmountInputs] = useState<Record<string, string>>({});
+  const [paymentMethodByBillId, setPaymentMethodByBillId] = useState<Record<string, 'manual' | 'caixa_pequeno'>>({});
   const [whatsAppAssigneeByBillId, setWhatsAppAssigneeByBillId] = useState<Record<string, string>>({});
   const teamMembersWithPhone = useMemo(
     () =>
@@ -248,7 +249,7 @@ export const BillList: React.FC<BillListProps> = ({
         formatCurrency(bill.amount),
         formatDatePtBR(getBillDisplayPaidDate(bill)),
         formatCurrency(getBillDisplayPaidAmount(bill)),
-        paymentSource === 'bank' ? 'Banco' : paymentSource === 'manual' ? 'Manual' : '—',
+        paymentSource === 'bank' ? 'Banco' : paymentSource === 'caixa_pequeno' ? 'Caixa Pequeno' : paymentSource === 'manual' ? 'Manual' : '—',
         computedStatus,
       ];
     });
@@ -444,12 +445,13 @@ export const BillList: React.FC<BillListProps> = ({
     if (!bill || isBankPayment(bill)) return;
 
     if (paidDate) {
+      const method = paymentMethodByBillId[billId] ?? (bill.paymentSource === 'caixa_pequeno' ? 'caixa_pequeno' : 'manual');
       onUpdate({
         ...bill,
         paidDate,
         status: BillStatus.PAID,
         bankMatches: undefined,
-        paymentSource: 'manual',
+        paymentSource: method,
         paymentBankTransactionId: undefined,
         paymentBankReference: undefined,
         paymentBankDescription: undefined,
@@ -484,7 +486,9 @@ export const BillList: React.FC<BillListProps> = ({
       paidAmount,
       interestAmount,
       bankMatches: undefined,
-      paymentSource: bill.paidDate || paidAmount !== undefined ? 'manual' : undefined,
+      paymentSource: bill.paidDate || paidAmount !== undefined
+        ? (paymentMethodByBillId[billId] ?? (bill.paymentSource === 'caixa_pequeno' ? 'caixa_pequeno' : 'manual'))
+        : undefined,
       paymentBankTransactionId: undefined,
       paymentBankReference: undefined,
       paymentBankDescription: undefined,
@@ -773,6 +777,9 @@ export const BillList: React.FC<BillListProps> = ({
                     {paymentSource === 'manual' && (
                       <span className="rounded-full bg-emerald-100 px-2 py-1 font-bold uppercase text-emerald-700">Manual</span>
                     )}
+                    {paymentSource === 'caixa_pequeno' && (
+                      <span className="rounded-full bg-amber-100 px-2 py-1 font-bold uppercase text-amber-700">Caixa Pequeno</span>
+                    )}
                   </div>
                 </div>
 
@@ -809,13 +816,35 @@ export const BillList: React.FC<BillListProps> = ({
                     <div className="flex items-center justify-between gap-2">
                       <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Pago em</p>
                       {paymentSource && (
-                        <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold uppercase ${bankPayment ? 'bg-blue-100 text-blue-700' : 'bg-emerald-100 text-emerald-700'}`}>
-                          {bankPayment ? 'Banco' : 'Manual'}
+                        <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold uppercase ${bankPayment ? 'bg-blue-100 text-blue-700' : paymentSource === 'caixa_pequeno' ? 'bg-amber-100 text-amber-700' : 'bg-emerald-100 text-emerald-700'}`}>
+                          {bankPayment ? 'Banco' : paymentSource === 'caixa_pequeno' ? 'Cx. Pequeno' : 'Manual'}
                         </span>
                       )}
                     </div>
                     {canEdit ? (
                       <div className="mt-1 space-y-2">
+                        {!bankPayment && (
+                          <div className="flex gap-1">
+                            {(['manual', 'caixa_pequeno'] as const).map(method => {
+                              const active = (paymentMethodByBillId[bill.id] ?? (bill.paymentSource === 'caixa_pequeno' ? 'caixa_pequeno' : 'manual')) === method;
+                              return (
+                                <button
+                                  key={method}
+                                  type="button"
+                                  onClick={() => {
+                                    setPaymentMethodByBillId(prev => ({ ...prev, [bill.id]: method }));
+                                    if (displayPaidDate) {
+                                      onUpdate({ ...bill, paymentSource: method });
+                                    }
+                                  }}
+                                  className={`flex-1 rounded-lg px-2 py-1 text-[10px] font-bold uppercase transition-colors ${active ? (method === 'caixa_pequeno' ? 'bg-amber-100 text-amber-700' : 'bg-emerald-100 text-emerald-700') : 'bg-slate-100 text-slate-400 hover:bg-slate-200'}`}
+                                >
+                                  {method === 'caixa_pequeno' ? 'Cx. Pequeno' : 'Manual'}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        )}
                         <input
                           type="date"
                           value={displayPaidDate || ''}

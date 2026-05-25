@@ -53,6 +53,11 @@ export interface ChartOfAccount {
   category: DreCategory;
 }
 
+export interface CaixaPequenoConfig {
+  saldoInicial: number;
+  saldoInicialData: string; // YYYY-MM-DD, default '2026-01-01'
+}
+
 export interface Revenue {
   id: string;
   date: string; // YYYY-MM-DD
@@ -144,7 +149,7 @@ export interface Bill {
   isDeleted?: boolean;
   deletedAt?: string;
   deletedBy?: string;
-  paymentSource?: 'manual' | 'bank'; // Origem do realizado
+  paymentSource?: 'manual' | 'bank' | 'caixa_pequeno'; // Origem do realizado
   paymentBankTransactionId?: string; // ID da transacao conciliada no banco
   paymentBankReference?: string; // Referencia bancaria
   paymentBankDescription?: string; // Historico bancario

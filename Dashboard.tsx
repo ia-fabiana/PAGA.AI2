@@ -6,6 +6,7 @@ import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContaine
 import { theme } from './theme';
 import { getBillDisplayPaidAmount, getBillDisplayPaidDate, isBillFullyPaid } from './billPaymentUtils';
 import { carregarTransacoesSalvas, TrinksTransacaoSalva, mapFormaPagamento, COLUNA_LABELS } from './trinks';
+import { TrinksUpload } from './TrinksUpload';
 
 interface DashboardProps {
   bills: Bill[];
@@ -41,14 +42,16 @@ export const Dashboard: React.FC<DashboardProps> = ({ bills, suppliers, accounts
   const [trinksLoading, setTrinksLoading] = useState(false);
   const [trinksError, setTrinksError] = useState<string | null>(null);
 
-  useEffect(() => {
+  const loadTrinks = () => {
     setTrinksLoading(true);
     setTrinksError(null);
     carregarTransacoesSalvas(`${currentYear}-01-01`, `${currentYear}-12-31`)
       .then(data => { setTrinksData(data); console.log('[Dashboard] trinksData loaded:', data.length); })
       .catch(err => { console.error('[Dashboard] trinks load error:', err); setTrinksError(String(err?.message || err)); })
       .finally(() => setTrinksLoading(false));
-  }, [currentYear]);
+  };
+
+  useEffect(() => { loadTrinks(); }, [currentYear]);
 
   const parseLocalDate = (value?: string, endOfDay = false) => {
     if (!value) return null;
@@ -196,20 +199,23 @@ export const Dashboard: React.FC<DashboardProps> = ({ bills, suppliers, accounts
           <h1 className="text-4xl font-black" style={{ color: theme.colors.neutral.black }}>Visão Financeira</h1>
           <p className="text-slate-500 font-bold text-sm uppercase">Receita Trinks · Despesas · Resultado Líquido</p>
         </div>
-        <div className="bg-white p-3 rounded-[20px] border border-slate-100 shadow-[0_10px_15px_-3px_rgba(0,0,0,0.04)] flex flex-wrap items-center gap-3">
-          <div className="flex items-center gap-2">
-            <Filter size={16} className="text-slate-400" />
-            <span className="text-xs font-bold text-slate-400 uppercase">Período:</span>
+        <div className="flex flex-wrap items-center gap-3">
+          <TrinksUpload onComplete={() => loadTrinks()} />
+          <div className="bg-white p-3 rounded-[20px] border border-slate-100 shadow-[0_10px_15px_-3px_rgba(0,0,0,0.04)] flex flex-wrap items-center gap-3">
+            <div className="flex items-center gap-2">
+              <Filter size={16} className="text-slate-400" />
+              <span className="text-xs font-bold text-slate-400 uppercase">Período:</span>
+            </div>
+            <input type="date" className="bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs outline-none" value={pendingStart} onChange={e => setPendingStart(e.target.value)} />
+            <span className="text-slate-400 text-xs">até</span>
+            <input type="date" className="bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs outline-none" value={pendingEnd} onChange={e => setPendingEnd(e.target.value)} />
+            <button onClick={applyFilter} className="text-xs font-bold px-4 py-2 rounded-xl uppercase transition-all bg-indigo-600 text-white hover:bg-indigo-700">
+              Filtrar
+            </button>
+            <button onClick={resetToCurrentMonth} className="text-xs font-bold px-3 py-2 rounded-xl uppercase transition-all" style={{ backgroundColor: theme.colors.primary.purpleLight, color: theme.colors.primary.purple }}>
+              Este Mês
+            </button>
           </div>
-          <input type="date" className="bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs outline-none" value={pendingStart} onChange={e => setPendingStart(e.target.value)} />
-          <span className="text-slate-400 text-xs">até</span>
-          <input type="date" className="bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs outline-none" value={pendingEnd} onChange={e => setPendingEnd(e.target.value)} />
-          <button onClick={applyFilter} className="text-xs font-bold px-4 py-2 rounded-xl uppercase transition-all bg-indigo-600 text-white hover:bg-indigo-700">
-            Filtrar
-          </button>
-          <button onClick={resetToCurrentMonth} className="text-xs font-bold px-3 py-2 rounded-xl uppercase transition-all" style={{ backgroundColor: theme.colors.primary.purpleLight, color: theme.colors.primary.purple }}>
-            Este Mês
-          </button>
         </div>
       </header>
 

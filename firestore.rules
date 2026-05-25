@@ -1,9 +1,114 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Permite leitura e escrita apenas se o usuário estiver logado.
-    match /{document=**} {
-      allow read, write: if request.auth != null;
+    function authEmail() {
+      return request.auth != null && request.auth.token.email != null
+        ? request.auth.token.email
+        : null;
+    }
+
+    function isSuperAdmin() {
+      return authEmail() == 'fabianajjvsf@gmail.com';
+    }
+
+    function accessDocPath() {
+      return /databases/$(database)/documents/workspaces/paga-ai2-shared/meta/access;
+    }
+
+    function hasAccessDoc() {
+      return exists(accessDocPath());
+    }
+
+    function workspaceMemberEntry() {
+      return hasAccessDoc() && authEmail() != null
+        ? get(accessDocPath()).data.members[authEmail()]
+        : null;
+    }
+
+    function isWorkspaceMember() {
+      return request.auth != null && (
+        isSuperAdmin() ||
+        (
+          workspaceMemberEntry() != null &&
+          workspaceMemberEntry().active == true
+        )
+      );
+    }
+
+    function hasModulePermission(module) {
+      return request.auth != null && (
+        isSuperAdmin() ||
+        (
+          isWorkspaceMember() &&
+          workspaceMemberEntry().permissions[module] == true
+        )
+      );
+    }
+
+    function hasReconciliationPermission() {
+      return hasModulePermission('reconciliation') || hasModulePermission('bills_reconciliation');
+    }
+
+    match /workspaces/paga-ai2-shared/bills/{docId} {
+      allow read, write: if hasModulePermission('bills');
+    }
+
+    match /workspaces/paga-ai2-shared/suppliers/{docId} {
+      allow read, write: if hasModulePermission('suppliers');
+    }
+
+    match /workspaces/paga-ai2-shared/accounts/{docId} {
+      allow read, write: if hasModulePermission('accounts');
+    }
+
+    match /workspaces/paga-ai2-shared/revenues/{docId} {
+      allow read, write: if hasModulePermission('dre');
+    }
+
+    match /workspaces/paga-ai2-shared/team/{docId} {
+      allow read: if isWorkspaceMember();
+      allow write: if hasModulePermission('team');
+    }
+
+    match /workspaces/paga-ai2-shared/bank_reconciliations/{docId} {
+      allow read, write: if hasReconciliationPermission();
+    }
+
+    match /workspaces/paga-ai2-shared/meta/company {
+      allow read, write: if hasModulePermission('profile');
+    }
+
+    match /workspaces/paga-ai2-shared/meta/settings {
+      allow read, write: if hasModulePermission('accounts');
+    }
+
+    match /workspaces/paga-ai2-shared/meta/caixaPequeno {
+      allow read, write: if hasModulePermission('cashbox') || isSuperAdmin();
+    }
+
+    match /workspaces/paga-ai2-shared/meta/access {
+      allow read: if isWorkspaceMember();
+      allow write: if hasModulePermission('team');
+    }
+
+    match /cashbox/{docId} {
+      allow read: if hasModulePermission('cashbox') || hasModulePermission('dre');
+      allow write: if hasModulePermission('cashbox');
+    }
+
+    match /paymentMethods/{docId} {
+      allow read: if hasModulePermission('cashbox') || hasModulePermission('dre');
+      allow write: if hasModulePermission('cashbox');
+    }
+
+    match /trinks_transactions/{docId} {
+      allow read: if hasModulePermission('cashbox') || hasModulePermission('dre');
+      allow write: if hasModulePermission('cashbox');
+    }
+
+    // Permite migracao do layout antigo users/{uid}/... para workspaces.
+    match /users/{userId}/{document=**} {
+      allow read, write: if request.auth != null && request.auth.uid == userId;
     }
   }
 }
