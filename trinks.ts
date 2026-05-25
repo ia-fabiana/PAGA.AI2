@@ -69,6 +69,11 @@ export const TRINKS_MAPEAMENTO: Record<string, CashBoxColuna> = {
   'Crédito de Cliente':          'ignorado',
   'Vale-Presente':               'ignorado',
   'Descontar do Profissional':   'ignorado',
+  // Nomes do CSV de movimentação financeira (colunas agregadas)
+  'Crédito':                     'pagSeg',
+  'Débito':                      'rede',
+  'Pré-Pago':                    'ignorado',
+  'Outros':                      'frog',
 };
 
 export const COLUNA_LABELS: Record<CashBoxColuna, string> = {
