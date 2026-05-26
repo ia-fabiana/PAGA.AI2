@@ -701,14 +701,14 @@ export const CaixaPequeno: React.FC<Props> = ({ bills, accounts, config, onSaveC
                     <div className="flex gap-1 shrink-0">
                       <button
                         onClick={() => startEdit(m)}
-                        className="p-1.5 rounded-lg text-slate-300 hover:text-indigo-600 hover:bg-indigo-50 transition-colors"
+                        className="p-1.5 rounded-lg text-indigo-400 hover:text-indigo-600 hover:bg-indigo-50 transition-colors"
                         title="Editar"
                       >
                         <Pencil size={14} />
                       </button>
                       <button
                         onClick={() => handleDelete(m.billId!)}
-                        className="p-1.5 rounded-lg text-slate-300 hover:text-red-600 hover:bg-red-50 transition-colors"
+                        className="p-1.5 rounded-lg text-red-400 hover:text-red-600 hover:bg-red-50 transition-colors"
                         title="Excluir"
                       >
                         <Trash2 size={14} />
