@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { Upload, X, CheckCircle, AlertCircle, Loader, Download } from 'lucide-react';
+import React, { useState } from 'react';
+import { Upload, X, CheckCircle, AlertCircle, Loader, Save } from 'lucide-react';
 import { TeamMember, Bill, BillReconciliationMatch, BillsReconciliation } from './types';
 import { parseUniversalBankExtract, getDebitTransactions, matchDebitWithBills } from './cnabParser';
 
@@ -30,11 +30,15 @@ export const BillsReconciliationComponent: React.FC<BillsReconciliationComponent
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+    const isSupported = file.name.toLowerCase().endsWith('.ret') || file.name.toLowerCase().endsWith('.txt');
+    if (!isSupported) {
+      alert('Suba o extrato em .RET ou .TXT.');
+      return;
+    }
 
     setIsLoading(true);
     try {
-      const isPdf = file.name.toLowerCase().endsWith('.pdf');
-      const fileContent = isPdf ? await file.arrayBuffer() : await file.text();
+      const fileContent = await file.text();
       setFileName(file.name);
       setUploadedAt(new Date().toISOString());
 
@@ -192,11 +196,11 @@ export const BillsReconciliationComponent: React.FC<BillsReconciliationComponent
           </div>
           <div className="text-center">
             <p className="text-lg font-bold text-slate-800">Clique para fazer upload do extrato</p>
-            <p className="text-sm text-slate-500">Arquivo .RET, .TXT ou .PDF (Banco Inter CNAB 240)</p>
+            <p className="text-sm text-slate-500">Arquivo .RET ou .TXT. Reenvio do mesmo periodo deve virar nova versao.</p>
           </div>
           <input
             type="file"
-            accept=".ret,.txt,.pdf"
+            accept=".ret,.txt"
             onChange={handleFileUpload}
             disabled={isLoading}
             className="hidden"
@@ -263,7 +267,7 @@ export const BillsReconciliationComponent: React.FC<BillsReconciliationComponent
                             {match.matchType === 'none' && (
                               <X size={18} className="text-slate-400" />
                             )}
-                            <span className="font-bold text-slate-800">
+                            <span className="font-bold text-red-700">
                               {match.bankTransaction.description}
                             </span>
                           </div>
@@ -271,7 +275,7 @@ export const BillsReconciliationComponent: React.FC<BillsReconciliationComponent
                           <div className="grid grid-cols-2 gap-4">
                             <div>
                               <p className="text-xs text-slate-500 mb-1">Débito</p>
-                              <p className="text-lg font-bold text-slate-800">
+                              <p className="text-lg font-bold text-red-700">
                                 R$ {match.bankTransaction.amount.toFixed(2)}
                               </p>
                             </div>
@@ -343,7 +347,7 @@ export const BillsReconciliationComponent: React.FC<BillsReconciliationComponent
             disabled={isLoading}
             className="flex items-center gap-2 px-6 py-3 bg-indigo-600 text-white rounded-xl font-bold hover:bg-indigo-700 transition-colors disabled:opacity-50"
           >
-            {isLoading ? <Loader size={20} className="animate-spin" /> : <Download size={20} />}
+            {isLoading ? <Loader size={20} className="animate-spin" /> : <Save size={20} />}
             {isLoading ? 'Salvando...' : 'Salvar Reconciliação'}
           </button>
         </div>

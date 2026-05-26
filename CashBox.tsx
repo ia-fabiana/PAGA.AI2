@@ -8,9 +8,10 @@ import { PaymentMethodManager } from './PaymentMethodManager';
 interface CashBoxProps {
   user: TeamMember;
   onShowReport?: () => void;
+  onShowTrinksReconciliation?: () => void;
 }
 
-export const CashBox: React.FC<CashBoxProps> = ({ user, onShowReport }) => {
+export const CashBox: React.FC<CashBoxProps> = ({ user, onShowReport, onShowTrinksReconciliation }) => {
   const currentDate = new Date();
   const [entries, setEntries] = useState<CashBoxData[]>([]);
   const [methods, setMethods] = useState<PaymentMethod[]>([]);
@@ -105,7 +106,7 @@ export const CashBox: React.FC<CashBoxProps> = ({ user, onShowReport }) => {
   };
 
   // Check if user can edit
-  const canEdit = user.role === 'ADMIN' || (user.role !== 'VIEWER' && previousDayFilled);
+  const canEdit = user.role === 'ADMIN' || user.permissions?.cashbox === 'editor' || user.permissions?.canLaunchCaixa === true;
 
   // Get status color
   const getStatusColor = (status: string) => {
@@ -257,6 +258,15 @@ export const CashBox: React.FC<CashBoxProps> = ({ user, onShowReport }) => {
               >
                 <BarChart3 size={20} />
               </button>
+              {onShowTrinksReconciliation && (
+                <button
+                  onClick={onShowTrinksReconciliation}
+                  className="flex items-center gap-2 px-3 py-2 bg-slate-100 text-slate-700 rounded-lg hover:bg-slate-200 transition-colors text-sm font-semibold"
+                  title="Voltar para Caixa"
+                >
+                  ← Caixa
+                </button>
+              )}
               {user.role === 'ADMIN' && (
                 <button
                   onClick={() => setShowMethodManager(true)}

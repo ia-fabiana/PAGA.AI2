@@ -25,5 +25,12 @@
     },
     "allowImportingTsExtensions": true,
     "noEmit": true
-  }
+  },
+  "exclude": [
+    "BillList_original.tsx",
+    "edge-profile-prod-check/**",
+    "edge-profile-validate-prod/**",
+    "edge-profile-validate-prod2/**",
+    "node_modules/**"
+  ]
 }

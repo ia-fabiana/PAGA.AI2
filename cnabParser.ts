@@ -1,23 +1,24 @@
-import { BankTransaction, BankReconciliation } from './types';
+﻿import { BankTransaction, BankReconciliation } from './types';
 import * as pdfjsLib from 'pdfjs-dist';
 
-// Configure worker via CDN (mais compatível com Vite)
+// Configure worker via CDN (mais compatÃ­vel com Vite)
 pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.mjs`;
 
 /**
- * Parser genérico para múltiplos formatos de extrato bancário
+ * Parser genÃ©rico para mÃºltiplos formatos de extrato bancÃ¡rio
  * Suporta: CNAB 240, TXT, PDF
  */
 
 export enum FileFormat {
   CNAB = 'CNAB',
   TXT = 'TXT',
+  CSV = 'CSV',
   PDF = 'PDF',
   UNKNOWN = 'UNKNOWN'
 }
 
 /**
- * Detecta o formato do arquivo baseado no conteúdo e extensão
+ * Detecta o formato do arquivo baseado no conteÃºdo e extensÃ£o
  */
 export function detectFileFormat(fileContent: string | ArrayBuffer, fileName: string): FileFormat {
   const ext = fileName.split('.').pop()?.toUpperCase() || '';
@@ -26,17 +27,37 @@ export function detectFileFormat(fileContent: string | ArrayBuffer, fileName: st
     return FileFormat.PDF;
   }
 
-  if (ext === 'RET' || ext === 'TXT') {
+  if (ext === 'CSV') {
+    return FileFormat.CSV;
+  }
+
+  if (ext === 'RET') {
     return FileFormat.CNAB;
   }
 
+  if (ext === 'TXT') {
+    if (typeof fileContent === 'string' && fileContent.includes('0770001300')) {
+      return FileFormat.CNAB;
+    }
+
+    return FileFormat.TXT;
+  }
+
   if (typeof fileContent === 'string') {
-    // Se começar com CNAB pattern
+    // Se comeÃ§ar com CNAB pattern
     if (fileContent.includes('0770001300')) {
       return FileFormat.CNAB;
     }
 
-    // Tenta detectar por conteúdo
+    // Tenta detectar por conteÃºdo
+    if (fileContent.includes('Data Lan') || fileContent.includes(';')) {
+      return FileFormat.CSV;
+    }
+
+    if (fileContent.includes('|') || fileContent.includes('\t')) {
+      return FileFormat.TXT;
+    }
+
     if (fileContent.includes('PIX') && fileContent.includes('RECEBIDO')) {
       return FileFormat.CNAB;
     }
@@ -47,7 +68,7 @@ export function detectFileFormat(fileContent: string | ArrayBuffer, fileName: st
 
 /**
  * Parser para arquivos CNAB 240 do Banco Inter
- * Baseado no layout padrão FEBRABAN
+ * Baseado no layout padrÃ£o FEBRABAN
  */
 
 interface CNABHeader {
@@ -62,16 +83,36 @@ interface CNABDetail {
   sequenceNumber: number;
   date: string;
   amount: number;
-  type: 'C' | 'D'; // Crédito ou Débito
+  type: 'C' | 'D'; // CrÃ©dito ou DÃ©bito
   description: string;
   reference: string;
 }
 
+function isValidIsoDateParts(year: string, month: string, day: string): boolean {
+  if (!/^\d{4}$/.test(year) || !/^\d{2}$/.test(month) || !/^\d{2}$/.test(day)) {
+    return false;
+  }
+
+  const yearNumber = Number(year);
+  const monthNumber = Number(month);
+  const dayNumber = Number(day);
+  if (monthNumber < 1 || monthNumber > 12 || dayNumber < 1 || dayNumber > 31) {
+    return false;
+  }
+
+  const candidate = new Date(yearNumber, monthNumber - 1, dayNumber);
+  return (
+    candidate.getFullYear() === yearNumber &&
+    candidate.getMonth() === monthNumber - 1 &&
+    candidate.getDate() === dayNumber
+  );
+}
+
 /**
- * Extrai informações do header do CNAB
+ * Extrai informaÃ§Ãµes do header do CNAB
  */
 function parseHeader(line: string): CNABHeader | null {
-  if (line.substring(7, 8) !== '0') return null; // Não é linha de header
+  if (line.substring(7, 8) !== '0') return null; // NÃ£o Ã© linha de header
 
   const bankCode = line.substring(0, 3);
   const companyName = line.substring(72, 102).trim();
@@ -87,39 +128,45 @@ function parseHeader(line: string): CNABHeader | null {
 }
 
 /**
- * Extrai informações de uma linha de detalhe (transação)
+ * Extrai informaÃ§Ãµes de uma linha de detalhe (transaÃ§Ã£o)
  */
 function parseDetail(line: string): CNABDetail | null {
-  // Verifica se é linha de detalhe tipo E (segmento E para extrato)
+  // Verifica se Ã© linha de detalhe tipo E (segmento E para extrato)
   const recordType = line.substring(7, 8);
   const segmentType = line.substring(13, 14);
   
   if (recordType !== '3' || segmentType !== 'E') return null;
 
   try {
-    // Extrai o número sequencial
+    // Extrai o nÃºmero sequencial
     const sequenceNumber = parseInt(line.substring(8, 13));
+    if (!Number.isFinite(sequenceNumber)) return null;
     
-    // Extrai a data (posições podem variar, vou usar o padrão comum)
+    // Extrai a data (posiÃ§Ãµes podem variar, vou usar o padrÃ£o comum)
     // Formato: DDMMAAAA (8 caracteres)
     const dateStr = line.substring(68, 76); // Ajustar conforme layout real
+    if (!/^\d{8}$/.test(dateStr)) return null;
     const day = dateStr.substring(0, 2);
     const month = dateStr.substring(2, 4);
     const year = dateStr.substring(4, 8);
+    if (!isValidIsoDateParts(year, month, day)) return null;
     const date = `${year}-${month}-${day}`;
     
-    // Extrai o valor (13 dígitos + 2 decimais = 15 caracteres)
+    // Extrai o valor (13 dÃ­gitos + 2 decimais = 15 caracteres)
     const amountStr = line.substring(76, 91);
+    if (!/^\d+$/.test(amountStr)) return null;
     const amount = parseInt(amountStr) / 100;
+    if (!Number.isFinite(amount) || amount <= 0) return null;
     
-    // Extrai tipo (C=Crédito, D=Débito)
+    // Extrai tipo (C=CrÃ©dito, D=DÃ©bito)
     const typeChar = line.substring(91, 92);
+    if (typeChar !== 'C' && typeChar !== 'D') return null;
     const type = typeChar === 'C' ? 'C' : 'D';
     
-    // Extrai descrição
+    // Extrai descriÃ§Ã£o
     const description = line.substring(105, 135).trim();
     
-    // Extrai referência/ID da transação
+    // Extrai referÃªncia/ID da transaÃ§Ã£o
     const reference = line.substring(135, 160).trim();
     
     return {
@@ -151,10 +198,13 @@ function formatDate(ddmmyyyy: string): string {
  * Parser principal para arquivo CNAB 240 do Banco Inter
  */
 export function parseBancoInterCNAB(fileContent: string, fileName: string, uploadedBy: string): BankReconciliation {
-  const lines = fileContent.split('\n').filter(line => line.trim().length > 0);
+  const lines = fileContent
+    .split(/\r?\n/)
+    .map(line => line.replace(/\r/g, ''))
+    .filter(line => line.trim().length > 0);
   
-  console.log('🏦 CNAB - Total de linhas:', lines.length);
-  console.log('🏦 CNAB - Primeira linha:', lines[0]?.substring(0, 50));
+  console.log('ðŸ¦ CNAB - Total de linhas:', lines.length);
+  console.log('ðŸ¦ CNAB - Primeira linha:', lines[0]?.substring(0, 50));
   
   const transactions: BankTransaction[] = [];
   let header: CNABHeader | null = null;
@@ -171,17 +221,34 @@ export function parseBancoInterCNAB(fileContent: string, fileName: string, uploa
       }
     }
     
+    const standardDetail = parseDetail(line);
+    if (standardDetail) {
+      if (!minDate || standardDetail.date < minDate) minDate = standardDetail.date;
+      if (!maxDate || standardDetail.date > maxDate) maxDate = standardDetail.date;
+
+      transactions.push({
+        id: `bank-${standardDetail.date}-${standardDetail.sequenceNumber}-${standardDetail.reference}`,
+        date: standardDetail.date,
+        type: standardDetail.type === 'C' ? 'CREDIT' : 'DEBIT',
+        amount: standardDetail.amount,
+        description: standardDetail.description || 'Sem descriÃ§Ã£o',
+        reference: standardDetail.reference,
+        reconciled: false
+      });
+      continue;
+    }
+
     // Tenta fazer parse das linhas de detalhe
-    // No formato do seu extrato, as linhas começam com '0770001300'
+    // No formato do seu extrato, as linhas comeÃ§am com '0770001300'
     if (line.startsWith('0770001300')) {
       try {
-        // Extrai dados específicos do formato do Banco Inter
+        // Extrai dados especÃ­ficos do formato do Banco Inter
         const sequenceStr = line.substring(10, 15);
         const sequenceNumber = parseInt(sequenceStr);
         
-        // Encontra a posição do padrão de data (DDMMAAAA seguido do valor)
+        // Encontra a posiÃ§Ã£o do padrÃ£o de data (DDMMAAAA seguido do valor)
         // Exemplo: S0201202602012026000000000005000000C
-        // A data real é a segunda (02012026 = 02/01/2026)
+        // A data real Ã© a segunda (02012026 = 02/01/2026)
         const datePattern = line.match(/S\d{8}(\d{8})/);
         let date = '';
         if (datePattern) {
@@ -193,7 +260,7 @@ export function parseBancoInterCNAB(fileContent: string, fileName: string, uploa
         }
         
         if (!date) {
-          console.log('⚠️ Data não encontrada na linha:', line.substring(0, 100));
+          console.log('âš ï¸ Data nÃ£o encontrada na linha:', line.substring(0, 100));
           continue;
         }
         
@@ -201,31 +268,30 @@ export function parseBancoInterCNAB(fileContent: string, fileName: string, uploa
         if (!minDate || date < minDate) minDate = date;
         if (!maxDate || date > maxDate) maxDate = date;
         
-        // Valor: vem depois da data, 17 dígitos (15 + 2 decimais)
-        const valuePattern = line.match(/S\d{8}\d{8}(\d{17})/);
+        // Valor: alguns arquivos vÃªm com 15, 16 ou 17 dÃ­gitos antes do tipo
+        const valuePattern = line.match(/S\d{8}\d{8}(\d{15,17})([CD])?/);
         let amount = 0;
         if (valuePattern) {
           amount = parseInt(valuePattern[1]) / 100;
         }
         
-        // Tipo: vem logo depois do valor (C ou D)
-        const typePattern = line.match(/S\d{8}\d{8}\d{17}([CD])/);
-        const typeChar = typePattern ? typePattern[1] : 'D';
-        const type: 'CREDIT' | 'DEBIT' = typeChar === 'C' ? 'CREDIT' : 'DEBIT';
-        
-        // Descrição: vem depois do código do banco (geralmente após 7 dígitos)
+        // DescriÃ§Ã£o: vem depois do cÃ³digo do banco (geralmente apÃ³s 7 dÃ­gitos)
         const descPattern = line.match(/[CD]\d{7}(.{25})/);
-        const description = descPattern ? descPattern[1].trim() : 'Sem descrição';
+        const description = descPattern ? descPattern[1].trim() : 'Sem descriÃ§Ã£o';
+
+        // Tipo: tenta encontrar apÃ³s o valor, depois por posiÃ§Ã£o fixa e por fim por texto
+        const rawTypeLabel = `${valuePattern?.[2] || ''} ${line.substring(91, 92) || ''} ${description}`.trim();
+        const type = parseTransactionType(rawTypeLabel || description, amount);
         
-        // Referência
+        // ReferÃªncia
         const reference = line.substring(135, 160).trim();
         
-        // Cria a transação
+        // Cria a transaÃ§Ã£o
         const transaction: BankTransaction = {
           id: `bank-${date}-${sequenceNumber}-${reference}`,
           date,
           type,
-          amount,
+          amount: Math.abs(amount),
           description,
           reference,
           reconciled: false
@@ -238,12 +304,12 @@ export function parseBancoInterCNAB(fileContent: string, fileName: string, uploa
     }
   }
   
-  console.log('🏦 CNAB - Total de transações encontradas:', transactions.length);
-  console.log('🏦 CNAB - Distribuição:', {
+  console.log('ðŸ¦ CNAB - Total de transaÃ§Ãµes encontradas:', transactions.length);
+  console.log('ðŸ¦ CNAB - DistribuiÃ§Ã£o:', {
     creditos: transactions.filter(t => t.type === 'CREDIT').length,
     debitos: transactions.filter(t => t.type === 'DEBIT').length
   });
-  console.log('🏦 CNAB - Primeiras 5 transações:', transactions.slice(0, 5).map(t => ({
+  console.log('ðŸ¦ CNAB - Primeiras 5 transaÃ§Ãµes:', transactions.slice(0, 5).map(t => ({
     date: t.date,
     type: t.type,
     amount: t.amount,
@@ -263,7 +329,7 @@ export function parseBancoInterCNAB(fileContent: string, fileName: string, uploa
     accountNumber: header?.accountNumber || 'Desconhecida',
     startDate: minDate || '',
     endDate: maxDate || '',
-    initialBalance: 0, // Não disponível no extrato simples
+    initialBalance: 0, // NÃ£o disponÃ­vel no extrato simples
     finalBalance: credits - debits,
     totalTransactions: transactions.length,
     reconciledTransactions: 0,
@@ -275,7 +341,7 @@ export function parseBancoInterCNAB(fileContent: string, fileName: string, uploa
 }
 
 /**
- * Agrupa transações de crédito por data
+ * Agrupa transaÃ§Ãµes de crÃ©dito por data
  */
 export function groupCreditsByDate(transactions: BankTransaction[]): Record<string, BankTransaction[]> {
   const grouped: Record<string, BankTransaction[]> = {};
@@ -293,7 +359,7 @@ export function groupCreditsByDate(transactions: BankTransaction[]): Record<stri
 }
 
 /**
- * Calcula total de créditos para uma data específica
+ * Calcula total de crÃ©ditos para uma data especÃ­fica
  */
 export function getTotalCreditsForDate(transactions: BankTransaction[], date: string): number {
   return transactions
@@ -302,7 +368,7 @@ export function getTotalCreditsForDate(transactions: BankTransaction[], date: st
 }
 
 /**
- * Filtra apenas transações PIX recebidas
+ * Filtra apenas transaÃ§Ãµes PIX recebidas
  */
 export function getPixReceivedTransactions(transactions: BankTransaction[]): BankTransaction[] {
   return transactions.filter(t => 
@@ -311,14 +377,14 @@ export function getPixReceivedTransactions(transactions: BankTransaction[]): Ban
   );
 }
 /**
- * Extrai apenas transações de DÉBITO
+ * Extrai apenas transaÃ§Ãµes de DÃ‰BITO
  */
 export function getDebitTransactions(transactions: BankTransaction[]): BankTransaction[] {
   return transactions.filter(t => t.type === 'DEBIT').sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
 }
 
 /**
- * Calcula total de débitos para uma data específica
+ * Calcula total de dÃ©bitos para uma data especÃ­fica
  */
 export function getTotalDebitsForDate(transactions: BankTransaction[], date: string): number {
   return transactions
@@ -327,8 +393,8 @@ export function getTotalDebitsForDate(transactions: BankTransaction[], date: str
 }
 
 /**
- * Tenta fazer matching automático entre débitos e Bills
- * Retorna um objeto com score de confiança (0-100) para cada possível match
+ * Tenta fazer matching automÃ¡tico entre dÃ©bitos e Bills
+ * Retorna um objeto com score de confianÃ§a (0-100) para cada possÃ­vel match
  */
 export function matchDebitWithBills(debit: BankTransaction, bills: any[]): { billId: string; score: number }[] {
   const matches: { billId: string; score: number }[] = [];
@@ -339,34 +405,34 @@ export function matchDebitWithBills(debit: BankTransaction, bills: any[]): { bil
     let score = 0;
     let scoreBreakdown = { amount: 0, date: 0, description: 0 };
     
-    // Usa paidAmount se disponível, senão usa amount
+    // Usa paidAmount se disponÃ­vel, senÃ£o usa amount
     const billAmount = bill.paidAmount || bill.amount;
     const amountDiff = Math.abs(billAmount - debitAmount);
     
-    // Match de valor - mais flexível
+    // Match de valor - mais flexÃ­vel
     if (amountDiff < 0.01) {
-      // Match exato ou quase exato (até 1 centavo)
+      // Match exato ou quase exato (atÃ© 1 centavo)
       score += 100;
       scoreBreakdown.amount = 100;
     } else if (amountDiff < 1) {
-      // Até R$1 de diferença
+      // AtÃ© R$1 de diferenÃ§a
       score += 80;
       scoreBreakdown.amount = 80;
     } else if (amountDiff < 5) {
-      // Até R$5 de diferença
+      // AtÃ© R$5 de diferenÃ§a
       score += 60;
       scoreBreakdown.amount = 60;
     } else if (amountDiff < 10) {
-      // Até R$10 de diferença
+      // AtÃ© R$10 de diferenÃ§a
       score += 40;
       scoreBreakdown.amount = 40;
     } else if (amountDiff < 50) {
-      // Até R$50 de diferença (para contas maiores)
+      // AtÃ© R$50 de diferenÃ§a (para contas maiores)
       score += 20;
       scoreBreakdown.amount = 20;
     }
     
-    // Match de data - MUITO flexível (até 30 dias)
+    // Match de data - MUITO flexÃ­vel (atÃ© 30 dias)
     if (score > 0) {
       const billDate = new Date(bill.paidDate || bill.dueDate);
       const daysDiff = Math.abs(Math.floor((debitDate.getTime() - billDate.getTime()) / (1000 * 60 * 60 * 24)));
@@ -384,17 +450,17 @@ export function matchDebitWithBills(debit: BankTransaction, bills: any[]): { bil
         score += 15; // Dentro de 15 dias
         scoreBreakdown.date = 15;
       } else if (daysDiff <= 30) {
-        score += 10; // Dentro de 30 dias (muito flexível)
+        score += 10; // Dentro de 30 dias (muito flexÃ­vel)
         scoreBreakdown.date = 10;
       }
     }
     
-    // Match de descrição (configuração fuzzy básica)
+    // Match de descriÃ§Ã£o (configuraÃ§Ã£o fuzzy bÃ¡sica)
     if (score > 0 && bill.description) {
       const debitDesc = debit.description.toUpperCase();
       const billDesc = bill.description.toUpperCase();
       
-      // Verifica se tem palavras em comum (mínimo 3 caracteres)
+      // Verifica se tem palavras em comum (mÃ­nimo 3 caracteres)
       const debitWords = debitDesc.split(/\s+/);
       const billWords = billDesc.split(/\s+/);
       
@@ -413,7 +479,7 @@ export function matchDebitWithBills(debit: BankTransaction, bills: any[]): { bil
     
     // Log detalhado para debugging
     if (score > 0 && score < 60) {
-      console.log(`⚠️ MATCH BAIXO (${score} pts) - Débito: R$${debitAmount.toFixed(2)} em ${debit.date} vs Bill: R$${billAmount.toFixed(2)} venc ${bill.dueDate} pago ${bill.paidDate || 'N/A'}`);
+      console.log(`âš ï¸ MATCH BAIXO (${score} pts) - DÃ©bito: R$${debitAmount.toFixed(2)} em ${debit.date} vs Bill: R$${billAmount.toFixed(2)} venc ${bill.dueDate} pago ${bill.paidDate || 'N/A'}`);
       console.log(`   Breakdown: valor=${scoreBreakdown.amount}, data=${scoreBreakdown.date}, desc=${scoreBreakdown.description} | Diff: R$${amountDiff.toFixed(2)}`);
     }
     
@@ -426,16 +492,136 @@ export function matchDebitWithBills(debit: BankTransaction, bills: any[]): { bil
   const validMatches = matches.filter(m => m.score >= 30);
   
   if (matches.length > 0 && validMatches.length === 0) {
-    console.log(`🔍 Débito R$${debitAmount.toFixed(2)} em ${debit.date} teve ${matches.length} matches mas todos abaixo de 30 pts`);
+    console.log(`ðŸ” DÃ©bito R$${debitAmount.toFixed(2)} em ${debit.date} teve ${matches.length} matches mas todos abaixo de 30 pts`);
     console.log(`   Melhores scores: ${matches.slice(0, 3).map(m => m.score).join(', ')}`);
   }
   
   return validMatches.sort((a, b) => b.score - a.score);
 }
 
+function normalizeTransactionTypeLabel(value: string): string {
+  return value
+    .trim()
+    .toUpperCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '');
+}
+
+function parseTransactionType(typeLabel: string, amount: number): 'CREDIT' | 'DEBIT' {
+  const normalizedType = normalizeTransactionTypeLabel(typeLabel);
+
+  if (
+    normalizedType === 'C' ||
+    normalizedType === '+' ||
+    normalizedType.includes('CREDITO') ||
+    normalizedType.includes('CREDITO') ||
+    normalizedType.includes('RECEBIDO') ||
+    normalizedType.includes('RECEBIMENTO') ||
+    normalizedType.includes('ENTRADA')
+  ) {
+    return 'CREDIT';
+  }
+
+  if (
+    normalizedType === 'D' ||
+    normalizedType === '-' ||
+    normalizedType.includes('DEBITO') ||
+    normalizedType.includes('ENVIADO') ||
+    normalizedType.includes('PAGAMENTO') ||
+    normalizedType.includes('SAIDA') ||
+    normalizedType.includes('TARIFA') ||
+    normalizedType.includes('TRANSFER')
+  ) {
+    return 'DEBIT';
+  }
+
+  return amount < 0 ? 'DEBIT' : 'CREDIT';
+}
+
+function normalizeHeaderLabel(value: string): string {
+  return value
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim();
+}
+
+function isLikelyTxtHeader(parts: string[]): boolean {
+  const normalized = parts.map(normalizeHeaderLabel);
+  return (
+    normalized.some((part) => part.includes('data')) &&
+    normalized.some((part) => part.includes('valor')) &&
+    normalized.some((part) =>
+      part.includes('descricao') ||
+      part.includes('historico') ||
+      part.includes('operacao')
+    )
+  );
+}
+
+function buildHeaderMap(parts: string[]) {
+  const normalizedParts = parts.map(normalizeHeaderLabel);
+  const findIndex = (terms: string[], options?: { exclude?: string[] }) =>
+    normalizedParts.findIndex((part) => {
+      if (options?.exclude?.some(term => part.includes(term))) {
+        return false;
+      }
+
+      return terms.some((term) => part.includes(term));
+    });
+
+  const date = findIndex(['data']);
+  const description = findIndex(['descricao', 'historico', 'operacao'], { exclude: ['data'] });
+
+  return {
+    date,
+    description: description >= 0 ? description : findIndex(['lancamento'], { exclude: ['data'] }),
+    type: findIndex(['tipo', 'natureza']),
+    amount: findIndex(['valor', 'montante']),
+    counterparty: findIndex(['favorecido', 'fornecedor', 'beneficiario', 'cliente', 'nome']),
+    document: findIndex(['cpf', 'cnpj', 'documento']),
+    reference: findIndex(['referencia', 'controle', 'protocolo', 'id', 'nsu', 'autenticacao']),
+  };
+}
+
+function parseTxtDate(value: string): string {
+  const trimmed = value.trim();
+  if (!trimmed) return '';
+
+  if (trimmed.includes('/')) {
+    const [day, month, year] = trimmed.split('/');
+    if (day && month && year) {
+      return `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
+    }
+  }
+
+  if (trimmed.includes('-')) {
+    const parts = trimmed.split('-');
+    if (parts.length === 3 && parts[0].length === 2) {
+      return `${parts[2]}-${parts[1].padStart(2, '0')}-${parts[0].padStart(2, '0')}`;
+    }
+    if (parts.length === 3 && parts[0].length === 4) {
+      return trimmed;
+    }
+  }
+
+  return '';
+}
+
+function extractDocumentFromText(value: string): string | undefined {
+  const match = value.match(/\d{2,3}\.?\d{3}\.?\d{3}[\/-]?\d{2,4}|\d{3}\.?\d{3}\.?\d{3}-?\d{2}/);
+  return match?.[0];
+}
+
+function extractReferenceFromText(value: string): string | undefined {
+  const match = value.match(/[A-Z0-9]{8,}/i);
+  return match?.[0];
+}
+
 /**
  * Parser para TXT simples (extrato em formato de texto puro)
- * Formato esperado: Data | Descrição | Tipo (C/D) | Valor
+ * Formato esperado: Data | DescriÃ§Ã£o | Tipo (C/D) | Valor
  * Exemplo: 25/01/2026 | PIX RECEBIDO | C | 1000.00
  */
 export function parseTextExtract(fileContent: string, fileName: string, uploadedBy: string): BankReconciliation {
@@ -443,73 +629,89 @@ export function parseTextExtract(fileContent: string, fileName: string, uploaded
   const transactions: BankTransaction[] = [];
   let minDate = '';
   let maxDate = '';
-  
+  let headerMap: ReturnType<typeof buildHeaderMap> | null = null;
+
   lines.forEach((line, index) => {
-    // Pula header ou linhas com títulos
-    if (line.includes('Data') || line.includes('Descrição') || line.includes('Valor') || line.includes('---')) {
-      return;
-    }
-    
     try {
-      // Tenta fazer parse de diferentes separadores: | , Tab
-      const parts = line.includes('|') 
+      const parts = line.includes('|')
         ? line.split('|').map(p => p.trim())
         : line.split('\t').map(p => p.trim());
-      
+
       if (parts.length < 4) return;
-      
-      // Esperado: [data, descrição, tipo, valor, ...]
-      const dateStr = parts[0];
-      const description = parts[1];
-      const typeChar = parts[2].toUpperCase();
-      const amountStr = parts[3].replace(/[R$\s,]/g, '').replace('.', '').replace(',', '.');
-      
-      // Parse da data (DD/MM/YYYY ou DD-MM-YYYY)
-      let date = '';
-      if (dateStr.includes('/')) {
-        const [day, month, year] = dateStr.split('/');
-        date = `${year}-${month}-${day}`;
-      } else if (dateStr.includes('-')) {
-        const parts = dateStr.split('-');
-        if (parts.length === 3 && parts[0].length === 2) {
-          // DD-MM-YYYY
-          date = `${parts[2]}-${parts[1]}-${parts[0]}`;
-        } else {
-          // YYYY-MM-DD
-          date = dateStr;
-        }
+      if (line.includes('---')) return;
+
+      if (isLikelyTxtHeader(parts)) {
+        headerMap = buildHeaderMap(parts);
+        return;
       }
-      
+
+      const dateIndex = headerMap?.date ?? 0;
+      const amountIndex = headerMap?.amount ?? 3;
+      const typeIndex = headerMap?.type ?? 2;
+      const descriptionIndex = headerMap?.description ?? 1;
+      const counterpartyIndex = headerMap?.counterparty ?? -1;
+      const documentIndex = headerMap?.document ?? -1;
+      const referenceIndex = headerMap?.reference ?? -1;
+
+      const dateStr = parts[dateIndex] || parts[0] || '';
+      const amountCell = parts[amountIndex] || parts.find(part => /\d+[.,]\d{2}/.test(part)) || '';
+      const typeLabel = parts[typeIndex] || '';
+      const descriptionCell = parts[descriptionIndex] || '';
+      const counterpartyCell = counterpartyIndex >= 0 ? parts[counterpartyIndex] || '' : '';
+      const documentCell = documentIndex >= 0 ? parts[documentIndex] || '' : '';
+      const referenceCell = referenceIndex >= 0 ? parts[referenceIndex] || '' : '';
+      const amount = parseBrazilianAmount(amountCell);
+
+      let date = parseTxtDate(dateStr);
+      if (!date) {
+        date = parseTxtDate(parts.find(part => /(\d{2}\/\d{2}\/\d{4})|(\d{4}-\d{2}-\d{2})/.test(part)) || '');
+      }
+
       if (!date) return;
-      
-      const type: 'CREDIT' | 'DEBIT' = typeChar === 'C' ? 'CREDIT' : 'DEBIT';
-      const amount = parseFloat(amountStr) || 0;
-      
-      if (amount > 0) {
-        // Atualiza datas min/max
-        if (!minDate || date < minDate) minDate = date;
-        if (!maxDate || date > maxDate) maxDate = date;
-        
-        const transaction: BankTransaction = {
-          id: `txt-${date}-${index}-${description}`,
-          date,
-          type,
-          amount,
-          description,
-          reference: `${index}`,
-          reconciled: false
-        };
-        
-        transactions.push(transaction);
-      }
+      if (!Number.isFinite(amount) || amount === 0) return;
+
+      const textParts = parts.filter((part, partIndex) =>
+        part &&
+        partIndex !== dateIndex &&
+        partIndex !== amountIndex &&
+        partIndex !== typeIndex
+      );
+
+      const description = descriptionCell || textParts[0] || 'Sem descrição';
+      const counterparty = counterpartyCell || (
+        textParts.find((part) => {
+          const normalized = normalizeHeaderLabel(part);
+          return normalized.length > 3 && normalized !== normalizeHeaderLabel(description);
+        }) || ''
+      );
+      const document = documentCell || extractDocumentFromText(parts.join(' '));
+      const reference = referenceCell || extractReferenceFromText(parts.join(' ')) || `${index}`;
+      const type = parseTransactionType(`${typeLabel} ${description} ${counterparty}`, amount);
+
+      if (!minDate || date < minDate) minDate = date;
+      if (!maxDate || date > maxDate) maxDate = date;
+
+      const transaction: BankTransaction = {
+        id: `txt-${date}-${index}-${description}`,
+        date,
+        type,
+        amount: Math.abs(amount),
+        description,
+        counterparty: counterparty || undefined,
+        reference,
+        document: document || undefined,
+        reconciled: false
+      };
+
+      transactions.push(transaction);
     } catch (error) {
       console.error('Erro ao processar linha TXT:', line, error);
     }
   });
-  
+
   const credits = transactions.filter(t => t.type === 'CREDIT').reduce((sum, t) => sum + t.amount, 0);
   const debits = transactions.filter(t => t.type === 'DEBIT').reduce((sum, t) => sum + t.amount, 0);
-  
+
   const reconciliation: BankReconciliation = {
     id: `reconciliation-${Date.now()}`,
     uploadedAt: new Date().toISOString(),
@@ -526,10 +728,224 @@ export function parseTextExtract(fileContent: string, fileName: string, uploaded
     transactions,
     status: 'pending'
   };
-  
+
   return reconciliation;
 }
 
+export function parseCsvExtract(fileContent: string, fileName: string, uploadedBy: string): BankReconciliation {
+  const lines = fileContent
+    .split(/\r?\n/)
+    .map(line => line.replace(/^\uFEFF/, '').trim())
+    .filter(line => line.length > 0);
+
+  const splitCsvLine = (line: string, delimiter: string): string[] => {
+    const cells: string[] = [];
+    let current = '';
+    let insideQuotes = false;
+
+    for (let index = 0; index < line.length; index += 1) {
+      const char = line[index];
+      const nextChar = line[index + 1];
+
+      if (char === '"') {
+        if (insideQuotes && nextChar === '"') {
+          current += '"';
+          index += 1;
+        } else {
+          insideQuotes = !insideQuotes;
+        }
+        continue;
+      }
+
+      if (!insideQuotes && char === delimiter) {
+        cells.push(current.trim().replace(/^"|"$/g, ''));
+        current = '';
+        continue;
+      }
+
+      current += char;
+    }
+
+    cells.push(current.trim().replace(/^"|"$/g, ''));
+    return cells;
+  };
+
+  const countDelimiter = (line: string, delimiter: string): number => {
+    let count = 0;
+    let insideQuotes = false;
+
+    for (let index = 0; index < line.length; index += 1) {
+      const char = line[index];
+      const nextChar = line[index + 1];
+
+      if (char === '"') {
+        if (insideQuotes && nextChar === '"') {
+          index += 1;
+        } else {
+          insideQuotes = !insideQuotes;
+        }
+        continue;
+      }
+
+      if (!insideQuotes && char === delimiter) {
+        count += 1;
+      }
+    }
+
+    return count;
+  };
+
+  const detectDelimiter = (): string => {
+    const candidates = [';', ',', '\t', '|'];
+    const sampleLines = lines.slice(0, 10);
+    let bestDelimiter = ';';
+    let bestScore = -1;
+
+    candidates.forEach((candidate) => {
+      const score = sampleLines.reduce((sum, line) => sum + countDelimiter(line, candidate), 0);
+      if (score > bestScore) {
+        bestScore = score;
+        bestDelimiter = candidate;
+      }
+    });
+
+    return bestDelimiter;
+  };
+
+  const delimiter = detectDelimiter();
+  const amountPattern = /-?\d{1,3}(?:\.\d{3})*,\d{2}|-?\d+[.,]\d{2}/;
+  const findAmountIndex = (parts: string[]) => parts.findIndex(part => amountPattern.test(part));
+  const findDateIndex = (parts: string[]) => parts.findIndex(part => /^(\d{2}\/\d{2}\/\d{4}|\d{4}-\d{2}-\d{2}|\d{2}-\d{2}-\d{4})$/.test(part));
+
+  const transactions: BankTransaction[] = [];
+  let accountNumber = 'Desconhecida';
+  let minDate = '';
+  let maxDate = '';
+  let initialBalance = 0;
+  let headerMap: ReturnType<typeof buildHeaderMap> | null = null;
+
+  lines.forEach((line, index) => {
+    try {
+      const parts = splitCsvLine(line, delimiter).map(part => part.trim()).filter(part => part.length > 0);
+      if (parts.length === 0) return;
+
+      const firstCell = normalizeHeaderLabel(parts[0]);
+
+      if (firstCell === 'conta') {
+        accountNumber = parts[1] || accountNumber;
+        return;
+      }
+
+      if (firstCell === 'saldo') {
+        const balanceCell = parts.find(part => amountPattern.test(part)) || parts[1] || '0';
+        initialBalance = parseBrazilianAmount(balanceCell);
+        return;
+      }
+
+      if (
+        firstCell.includes('extrato conta corrente') ||
+        firstCell === 'periodo' ||
+        firstCell === 'per iodo' ||
+        firstCell === 'periodo de' ||
+        line.startsWith('Extrato Conta Corrente')
+      ) {
+        return;
+      }
+
+      if (isLikelyTxtHeader(parts)) {
+        headerMap = buildHeaderMap(parts);
+        return;
+      }
+
+      if (parts.every(part => normalizeHeaderLabel(part).length > 0 && !amountPattern.test(part)) && findDateIndex(parts) === -1) {
+        return;
+      }
+
+      const resolveIndex = (mappedIndex: number | undefined, fallbackIndex: number): number =>
+        typeof mappedIndex === 'number' && mappedIndex >= 0 ? mappedIndex : fallbackIndex;
+
+      const dateIndex = resolveIndex(headerMap?.date, findDateIndex(parts));
+      const amountIndex = resolveIndex(headerMap?.amount, findAmountIndex(parts));
+      const typeIndex = resolveIndex(headerMap?.type, parts.findIndex(part => ['c', 'd', 'credito', 'debito'].includes(normalizeHeaderLabel(part))));
+      const descriptionIndex = resolveIndex(
+        headerMap?.description,
+        parts.findIndex((part, partIndex) => partIndex !== dateIndex && partIndex !== amountIndex && partIndex !== typeIndex && !amountPattern.test(part))
+      );
+      const counterpartyIndex = resolveIndex(
+        headerMap?.counterparty,
+        parts.findIndex((part, partIndex) => partIndex !== dateIndex && partIndex !== amountIndex && partIndex !== typeIndex && partIndex !== descriptionIndex && normalizeHeaderLabel(part).length > 2)
+      );
+      const documentIndex = resolveIndex(
+        headerMap?.document,
+        parts.findIndex(part => /\d{11,14}|\d{3}\.\d{3}\.\d{3}-\d{2}|\d{2}\.\d{3}\.\d{3}\/\d{4}-\d{2}/.test(part))
+      );
+      const referenceIndex = resolveIndex(
+        headerMap?.reference,
+        parts.findIndex((part, partIndex) => partIndex !== dateIndex && partIndex !== amountIndex && /^[A-Z0-9-]*\d[A-Z0-9-]{5,}$/i.test(part))
+      );
+
+      const rawDate = dateIndex >= 0 ? parts[dateIndex] || '' : '';
+      const rawAmount = amountIndex >= 0 ? parts[amountIndex] || '' : '';
+      const rawType = typeIndex >= 0 ? parts[typeIndex] || '' : '';
+      const date = parseTxtDate(rawDate);
+      const amount = parseBrazilianAmount(rawAmount);
+
+      if (!date || !Number.isFinite(amount) || amount === 0) return;
+
+      const fallbackTextParts = parts.filter((part, partIndex) =>
+        partIndex !== dateIndex &&
+        partIndex !== amountIndex &&
+        partIndex !== typeIndex
+      );
+
+      const history = descriptionIndex >= 0 ? parts[descriptionIndex] || '' : fallbackTextParts[0] || 'Sem histórico';
+      const counterparty = counterpartyIndex >= 0 ? parts[counterpartyIndex] || '' : fallbackTextParts.find(part => part !== history) || '';
+      const document = documentIndex >= 0 ? parts[documentIndex] || '' : extractDocumentFromText(parts.join(' '));
+      const extractedReference = extractReferenceFromText(parts.join(' '));
+      const reference = referenceIndex >= 0
+        ? parts[referenceIndex] || ''
+        : (extractedReference && /\d/.test(extractedReference) ? extractedReference : `${index}`);
+      const type = parseTransactionType(`${rawType} ${history} ${counterparty}`, amount);
+
+      if (!minDate || date < minDate) minDate = date;
+      if (!maxDate || date > maxDate) maxDate = date;
+
+      transactions.push({
+        id: `csv-${date}-${index}-${history}`,
+        date,
+        type,
+        amount: Math.abs(amount),
+        description: history,
+        counterparty: counterparty || undefined,
+        reference,
+        document: document || undefined,
+        reconciled: false
+      });
+    } catch (error) {
+      console.error('Erro ao processar linha CSV:', line, error);
+    }
+  });
+
+  const credits = transactions.filter(t => t.type === 'CREDIT').reduce((sum, t) => sum + t.amount, 0);
+  const debits = transactions.filter(t => t.type === 'DEBIT').reduce((sum, t) => sum + t.amount, 0);
+
+  return {
+    id: `reconciliation-${Date.now()}`,
+    uploadedAt: new Date().toISOString(),
+    uploadedBy,
+    fileName,
+    bankName: 'Banco Inter (CSV)',
+    accountNumber,
+    startDate: minDate || '',
+    endDate: maxDate || '',
+    initialBalance,
+    finalBalance: credits - debits,
+    totalTransactions: transactions.length,
+    reconciledTransactions: 0,
+    transactions,
+    status: 'pending'
+  };
+}
 /**
  * Parser para PDF (placeholder - requer biblioteca PDF)
  * Por enquanto retorna erro sugestivo
@@ -573,17 +989,17 @@ function shouldSkipPdfLine(line: string): boolean {
   const blacklist = [
     'EXTRATO',
     'PERIODO',
-    'PERÍODO',
+    'PERÃODO',
     'SALDO',
     'TOTAL',
     'AGENCIA',
-    'AGÊNCIA',
+    'AGÃŠNCIA',
     'CONTA',
     'BANCO',
     'CLIENTE',
     'DATA',
     'HISTORICO',
-    'HISTÓRICO',
+    'HISTÃ“RICO',
     'VALOR'
   ];
 
@@ -633,11 +1049,11 @@ async function extractPdfLines(fileContent: ArrayBuffer): Promise<string[]> {
 
 export async function parsePdfExtract(fileContent: ArrayBuffer, fileName: string, uploadedBy: string): Promise<BankReconciliation> {
   const lines = await extractPdfLines(fileContent);
-  console.log('📄 PDF - Total de linhas extraídas:', lines.length);
-  console.log('📄 PDF - Primeiras 20 linhas:', lines.slice(0, 20));
+  console.log('ðŸ“„ PDF - Total de linhas extraÃ­das:', lines.length);
+  console.log('ðŸ“„ PDF - Primeiras 20 linhas:', lines.slice(0, 20));
   
   const { startDate, endDate, yearFallback } = extractPdfDateRange(lines);
-  console.log('📅 Período detectado:', { startDate, endDate, yearFallback });
+  console.log('ðŸ“… PerÃ­odo detectado:', { startDate, endDate, yearFallback });
   
   const transactions: BankTransaction[] = [];
   let minDate = '';
@@ -679,16 +1095,16 @@ export async function parsePdfExtract(fileContent: ArrayBuffer, fileName: string
       let type: 'CREDIT' | 'DEBIT' = 'CREDIT';
       if (amountMatch[0].trim().startsWith('-')) {
         type = 'DEBIT';
-      } else if (upper.includes('DEBITO') || upper.includes('DÉBITO') || upper.includes('PAGAMENTO') || upper.includes('SAIDA') || upper.includes('SAÍDA') || upper.includes('TARIFA') || upper.includes('PIX ENVIADO') || upper.includes('TRANSFER')) {
+      } else if (upper.includes('DEBITO') || upper.includes('DÃ‰BITO') || upper.includes('PAGAMENTO') || upper.includes('SAIDA') || upper.includes('SAÃDA') || upper.includes('TARIFA') || upper.includes('PIX ENVIADO') || upper.includes('TRANSFER')) {
         type = 'DEBIT';
-      } else if (upper.includes('CREDITO') || upper.includes('CRÉDITO') || upper.includes('RECEB') || upper.includes('ENTRADA') || upper.includes('PIX RECEBIDO')) {
+      } else if (upper.includes('CREDITO') || upper.includes('CRÃ‰DITO') || upper.includes('RECEB') || upper.includes('ENTRADA') || upper.includes('PIX RECEBIDO')) {
         type = 'CREDIT';
       }
 
       let description = line;
       description = description.replace(rawDate, '').trim();
       description = description.replace(amountRegex, '').trim();
-      description = description.replace(/\bC\b|\bD\b|\bCREDITO\b|\bCRÉDITO\b|\bDEBITO\b|\bDÉBITO\b/gi, '').trim();
+      description = description.replace(/\bC\b|\bD\b|\bCREDITO\b|\bCRÃ‰DITO\b|\bDEBITO\b|\bDÃ‰BITO\b/gi, '').trim();
       description = normalizePdfLine(description);
 
       if (!description) return;
@@ -696,7 +1112,7 @@ export async function parsePdfExtract(fileContent: ArrayBuffer, fileName: string
       if (!minDate || date < minDate) minDate = date;
       if (!maxDate || date > maxDate) maxDate = date;
 
-      console.log('✅ Transação encontrada:', { date, type, amount, description: description.substring(0, 50) });
+      console.log('âœ… TransaÃ§Ã£o encontrada:', { date, type, amount, description: description.substring(0, 50) });
 
       transactions.push({
         id: `pdf-${date}-${index}-${description}`,
@@ -709,7 +1125,7 @@ export async function parsePdfExtract(fileContent: ArrayBuffer, fileName: string
       });
     });
 
-  console.log('💰 Total de transações encontradas:', transactions.length);
+  console.log('ðŸ’° Total de transaÃ§Ãµes encontradas:', transactions.length);
 
   const credits = transactions.filter(t => t.type === 'CREDIT').reduce((sum, t) => sum + t.amount, 0);
   const debits = transactions.filter(t => t.type === 'DEBIT').reduce((sum, t) => sum + t.amount, 0);
@@ -742,20 +1158,32 @@ export async function parseUniversalBankExtract(
 ): Promise<BankReconciliation> {
   const format = detectFileFormat(fileContent, fileName);
   
-  console.log('🔍 Formato detectado:', format, 'para arquivo:', fileName);
-  console.log('🔍 Tipo de conteúdo:', typeof fileContent);
+  console.log('ðŸ” Formato detectado:', format, 'para arquivo:', fileName);
+  console.log('ðŸ” Tipo de conteÃºdo:', typeof fileContent);
   
   switch (format) {
     case FileFormat.CNAB:
       if (typeof fileContent !== 'string') {
         throw new Error('Conteudo invalido para CNAB.');
       }
-      return parseBancoInterCNAB(fileContent, fileName, uploadedBy);
+      {
+        const cnabResult = parseBancoInterCNAB(fileContent, fileName, uploadedBy);
+        if (cnabResult.transactions.length > 0 || !fileName.toLowerCase().endsWith('.txt')) {
+          return cnabResult;
+        }
+
+        return parseTextExtract(fileContent, fileName, uploadedBy);
+      }
     case FileFormat.TXT:
       if (typeof fileContent !== 'string') {
         throw new Error('Conteudo invalido para TXT.');
       }
       return parseTextExtract(fileContent, fileName, uploadedBy);
+    case FileFormat.CSV:
+      if (typeof fileContent !== 'string') {
+        throw new Error('Conteudo invalido para CSV.');
+      }
+      return parseCsvExtract(fileContent, fileName, uploadedBy);
     case FileFormat.PDF:
       if (typeof fileContent === 'string') {
         throw new Error('Conteudo invalido para PDF.');
@@ -768,9 +1196,14 @@ export async function parseUniversalBankExtract(
       }
 
       try {
-        return parseBancoInterCNAB(fileContent, fileName, uploadedBy);
+        const cnabResult = parseBancoInterCNAB(fileContent, fileName, uploadedBy);
+        return cnabResult.transactions.length > 0
+          ? cnabResult
+          : parseTextExtract(fileContent, fileName, uploadedBy);
       } catch {
         return parseTextExtract(fileContent, fileName, uploadedBy);
       }
   }
 }
+
+

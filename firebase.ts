@@ -2,6 +2,7 @@
 import { initializeApp } from "firebase/app";
 import { getAuth } from "firebase/auth";
 import { getFirestore } from "firebase/firestore";
+import { getStorage } from "firebase/storage";
 
 // Configuração do Firebase
 const firebaseConfig = {
@@ -24,6 +25,7 @@ console.log("PAGA.AI - Firebase Config:", {
 
 let auth: any;
 let db: any;
+let storage: any;
 
 if (isMockMode) {
   console.warn("PAGA.AI: Rodando em modo de demonstração (LocalStorage).");
@@ -58,16 +60,19 @@ if (isMockMode) {
       })
     })
   }; 
+  storage = null;
 } else {
   try {
     const app = initializeApp(firebaseConfig);
     auth = getAuth(app);
     db = getFirestore(app);
+    storage = getStorage(app);
   } catch (e) {
     console.error("Erro ao inicializar Firebase real. Revertendo para Mock.");
     auth = { onAuthStateChanged: (cb: any) => { cb(null); return () => {}; }, signOut: () => {} };
     db = {};
+    storage = null;
   }
 }
 
-export { auth, db };
+export { auth, db, storage };

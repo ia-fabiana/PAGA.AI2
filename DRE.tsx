@@ -1,7 +1,7 @@
 
 import React, { useMemo, useState, useEffect } from 'react';
 import { Bill, Revenue, ChartOfAccount, DreCategory, BillStatus, CashBoxData } from './types';
-import { TrendingUp, FileDown, AlertCircle, X } from 'lucide-react';
+import { TrendingUp, TrendingDown, FileDown, AlertCircle, X, CheckCircle } from 'lucide-react';
 import { jsPDF } from 'jspdf';
 import 'jspdf-autotable';
 import { db } from './firebase';
@@ -30,7 +30,7 @@ export const DRE: React.FC<DREProps> = ({ bills, revenues, accounts, setRevenues
   const [realRevenueInputs, setRealRevenueInputs] = useState<Record<number, string>>({});
   const [selectedMonthIndex, setSelectedMonthIndex] = useState(new Date().getMonth());
   const [cashBoxEntries, setCashBoxEntries] = useState<CashBoxData[]>([]);
-  const currentYear = 2026;
+  const currentYear = new Date().getFullYear();
 
   // Load cashbox data from Firebase
   useEffect(() => {
@@ -325,9 +325,31 @@ export const DRE: React.FC<DREProps> = ({ bills, revenues, accounts, setRevenues
     });
   };
 
+  // ── Helpers para o hero e overview ──────────────────────────────────────────
+  const selectedData = dreData[selectedMonthIndex];
+  const totalDespesas = selectedData
+    ? selectedData.commissions + selectedData.fixedSalary + selectedData.fixedExpenses +
+      selectedData.variableExpenses + selectedData.proLabore + selectedData.interest + selectedData.products
+    : 0;
+  const resultado = selectedData?.netProfit ?? 0;
+  const receita = selectedData?.revenue ?? 0;
+  const margemPct = receita > 0 ? (resultado / receita) * 100 : null;
+  const isLucro = resultado >= 0;
+
+  const anoResultado = dreData.reduce((s, d) => s + d.netProfit, 0);
+  const anoReceita  = dreData.reduce((s, d) => s + d.revenue, 0);
+  const anoIsLucro  = anoResultado >= 0;
+
+  const fmtShort = (v: number) =>
+    Math.abs(v) >= 1000
+      ? `R$ ${(v / 1000).toFixed(1)}k`.replace('.', ',')
+      : fmt(v);
+
   return (
     <div className="space-y-8 animate-in fade-in duration-700">
-      <div className="flex justify-between items-center">
+
+      {/* ── Cabeçalho ──────────────────────────────────────────────────────── */}
+      <div className="flex justify-between items-center flex-wrap gap-4">
         <div>
           <h1 className="text-3xl font-black text-slate-800 tracking-tight uppercase">DRE COMERCIAL {currentYear}</h1>
           <p className="text-slate-500 font-bold uppercase text-xs tracking-widest mt-1">Resumo Consolidado das Telas de Gestão</p>
@@ -338,6 +360,99 @@ export const DRE: React.FC<DREProps> = ({ bills, revenues, accounts, setRevenues
         </div>
       </div>
 
+      {/* ── HERO — resultado do mês selecionado ────────────────────────────── */}
+      <div className={`rounded-[2rem] p-8 border-2 shadow-xl ${isLucro ? 'bg-emerald-50 border-emerald-200' : 'bg-red-50 border-red-200'}`}>
+        <div className="flex flex-col md:flex-row md:items-center gap-6">
+
+          {/* Resultado principal */}
+          <div className="flex-1">
+            <p className="text-xs font-black uppercase tracking-widest text-slate-500 mb-1">
+              Resultado — {months[selectedMonthIndex]} {currentYear}
+            </p>
+            <div className="flex items-center gap-4">
+              <div className={`p-3 rounded-2xl ${isLucro ? 'bg-emerald-500' : 'bg-red-500'}`}>
+                {isLucro
+                  ? <CheckCircle size={32} className="text-white" />
+                  : <AlertCircle size={32} className="text-white" />}
+              </div>
+              <div>
+                <p className={`text-5xl font-black leading-none ${isLucro ? 'text-emerald-700' : 'text-red-700'}`}>
+                  {isLucro ? '+' : ''}{fmt(resultado)}
+                </p>
+                <p className={`text-lg font-black uppercase mt-1 ${isLucro ? 'text-emerald-600' : 'text-red-600'}`}>
+                  {isLucro ? '✓ LUCRO' : '✗ PREJUÍZO'}
+                  {margemPct !== null && <span className="ml-2 text-base font-bold opacity-80">({margemPct.toFixed(1)}% margem)</span>}
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {/* Sub-cards */}
+          <div className="flex flex-wrap gap-4">
+            <div className="bg-white rounded-2xl px-6 py-4 border border-emerald-200 text-center min-w-[130px]">
+              <p className="text-xs font-bold text-slate-400 uppercase">Receita</p>
+              <p className="text-2xl font-black text-emerald-600 mt-1">{fmt(receita)}</p>
+            </div>
+            <div className="bg-white rounded-2xl px-6 py-4 border border-red-200 text-center min-w-[130px]">
+              <p className="text-xs font-bold text-slate-400 uppercase">Despesas</p>
+              <p className="text-2xl font-black text-red-500 mt-1">{fmt(totalDespesas)}</p>
+            </div>
+            <div className={`rounded-2xl px-6 py-4 border text-center min-w-[130px] ${anoIsLucro ? 'bg-white border-indigo-200' : 'bg-white border-red-200'}`}>
+              <p className="text-xs font-bold text-slate-400 uppercase">Resultado Ano</p>
+              <p className={`text-2xl font-black mt-1 ${anoIsLucro ? 'text-indigo-600' : 'text-red-600'}`}>
+                {anoIsLucro ? '+' : ''}{fmt(anoResultado)}
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <p className="text-xs text-slate-400 mt-4">
+          Clique em qualquer mês na linha abaixo ou no cabeçalho da tabela para selecionar.
+        </p>
+      </div>
+
+      {/* ── Linha anual — 12 meses verde/vermelho ──────────────────────────── */}
+      <div className="bg-white rounded-[1.5rem] border border-slate-200 shadow-sm p-5">
+        <p className="text-xs font-black text-slate-400 uppercase tracking-widest mb-4">Resultado Mensal {currentYear} — Clique para selecionar</p>
+        <div className="grid grid-cols-4 sm:grid-cols-6 lg:grid-cols-12 gap-2">
+          {dreData.map((d, i) => {
+            const luc = d.netProfit;
+            const hasData = d.revenue > 0 || d.netProfit !== 0;
+            const isSelected = i === selectedMonthIndex;
+            return (
+              <button
+                key={i}
+                onClick={() => setSelectedMonthIndex(i)}
+                className={`flex flex-col items-center p-3 rounded-xl border-2 transition-all cursor-pointer ${
+                  isSelected ? 'ring-2 ring-offset-1 ring-slate-800 scale-105' : 'hover:scale-105'
+                } ${
+                  !hasData ? 'bg-slate-50 border-slate-200'
+                  : luc >= 0 ? 'bg-emerald-50 border-emerald-300'
+                  : 'bg-red-50 border-red-300'
+                }`}
+              >
+                <p className="text-[10px] font-black uppercase text-slate-500">{months[i].slice(0, 3)}</p>
+                {hasData ? (
+                  <>
+                    <p className={`text-xs font-black mt-1 ${luc >= 0 ? 'text-emerald-700' : 'text-red-700'}`}>
+                      {luc >= 0 ? '+' : ''}{fmtShort(luc)}
+                    </p>
+                    <div className={`w-5 h-5 rounded-full mt-1 flex items-center justify-center ${luc >= 0 ? 'bg-emerald-500' : 'bg-red-500'}`}>
+                      {luc >= 0
+                        ? <CheckCircle size={12} className="text-white" />
+                        : <X size={12} className="text-white" />}
+                    </div>
+                  </>
+                ) : (
+                  <p className="text-[10px] text-slate-300 mt-1">—</p>
+                )}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* ── Tabela DRE ─────────────────────────────────────────────────────── */}
       <div className="bg-white rounded-[2rem] border border-slate-200 shadow-2xl overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse min-w-[2200px]">
@@ -533,17 +648,26 @@ export const DRE: React.FC<DREProps> = ({ bills, revenues, accounts, setRevenues
 
               {/* RESULTADO LÍQUIDO */}
               <tr className="bg-slate-900 text-white font-black border-t-4 border-white">
-                <td className="px-6 py-6 text-sm sticky left-0 z-20 bg-slate-900 uppercase">LUCRO OU PREJUÍZO LÍQUIDO</td>
-                {dreData.map((d, i) => (
-                  <React.Fragment key={i}>
-                    <td className={`px-4 py-6 text-center text-xs ${d.netProfit >= 0 ? 'bg-amber-200 text-amber-900' : 'bg-rose-200 text-rose-900'}`}>
-                      {fmt(d.netProfit)}
-                    </td>
-                    <td className={`px-4 py-6 text-center text-xs ${d.estNetProfit >= 0 ? 'bg-emerald-600 text-white' : 'bg-rose-600 text-white'}`}>
-                      {fmt(d.estNetProfit)}
-                    </td>
-                  </React.Fragment>
-                ))}
+                <td className="px-6 py-5 text-sm sticky left-0 z-20 bg-slate-900 uppercase">LUCRO OU PREJUÍZO LÍQUIDO</td>
+                {dreData.map((d, i) => {
+                  const isSelected = i === selectedMonthIndex;
+                  return (
+                    <React.Fragment key={i}>
+                      <td
+                        className={`px-4 py-5 text-center text-xs font-black cursor-pointer transition-all ${
+                          isSelected ? 'ring-2 ring-inset ring-white scale-105' : ''
+                        } ${d.netProfit >= 0 ? 'bg-emerald-500 text-white' : 'bg-red-500 text-white'}`}
+                        onClick={() => setSelectedMonthIndex(i)}
+                      >
+                        <span className="block text-base">{d.netProfit >= 0 ? '▲' : '▼'}</span>
+                        {fmt(d.netProfit)}
+                      </td>
+                      <td className={`px-4 py-5 text-center text-xs ${d.estNetProfit >= 0 ? 'bg-emerald-600 text-white' : 'bg-rose-600 text-white'}`}>
+                        {fmt(d.estNetProfit)}
+                      </td>
+                    </React.Fragment>
+                  );
+                })}
               </tr>
             </tbody>
           </table>
