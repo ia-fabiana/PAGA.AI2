@@ -697,25 +697,26 @@ export const CaixaPequeno: React.FC<Props> = ({ bills, accounts, config, onSaveC
                   <div className="w-28 text-sm font-black text-right shrink-0" style={{ color: m.balance >= 0 ? '#B45309' : '#DC2626' }}>
                     {fmt(m.balance)}
                   </div>
-                  {canEdit && (
-                    <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
+                  {canEdit ? (
+                    <div className="flex gap-1 shrink-0">
                       <button
                         onClick={() => startEdit(m)}
-                        className="p-1.5 rounded-lg text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 transition-colors"
+                        className="p-1.5 rounded-lg text-slate-300 hover:text-indigo-600 hover:bg-indigo-50 transition-colors"
                         title="Editar"
                       >
-                        <Pencil size={13} />
+                        <Pencil size={14} />
                       </button>
                       <button
                         onClick={() => handleDelete(m.billId!)}
-                        className="p-1.5 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50 transition-colors"
+                        className="p-1.5 rounded-lg text-slate-300 hover:text-red-600 hover:bg-red-50 transition-colors"
                         title="Excluir"
                       >
-                        <Trash2 size={13} />
+                        <Trash2 size={14} />
                       </button>
                     </div>
+                  ) : (
+                    <div className="w-14 shrink-0" />
                   )}
-                  {!canEdit && <div className="w-14 shrink-0" />}
                 </div>
               );
             })}
