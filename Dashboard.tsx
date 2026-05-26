@@ -366,38 +366,46 @@ export const Dashboard: React.FC<DashboardProps> = ({ bills, suppliers, accounts
         <div className="bg-white p-6 rounded-[20px] border border-slate-100 shadow-[0_10px_15px_-3px_rgba(0,0,0,0.04)]">
           <h3 className="text-lg font-semibold mb-4" style={{ color: theme.colors.neutral.black }}>Contas do Período</h3>
           <div className="space-y-4 max-h-[300px] overflow-y-auto pr-2">
-            {filteredBills
-              .filter(b => b.status !== BillStatus.PAID)
-              .sort((a, b) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime())
-              .map(bill => {
+            {(() => {
+              const periodNotPaid = filteredBills.filter(b => b.status !== BillStatus.PAID);
+              const periodIds = new Set(periodNotPaid.map(b => b.id));
+              const overdueOutside = bills.filter(b => isOverdue(b) && !periodIds.has(b.id));
+              const allContas = [...overdueOutside, ...periodNotPaid]
+                .sort((a, b) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime());
+              if (allContas.length === 0) return (
+                <div className="text-center py-12">
+                  <div className="text-slate-200 flex justify-center mb-2"><CreditCard size={32} /></div>
+                  <p className="text-slate-400 text-sm font-bold uppercase">Nenhuma conta pendente</p>
+                </div>
+              );
+              return allContas.map(bill => {
                 const supplier = suppliers.find(s => s.id === bill.supplierId);
                 const account = accounts.find(a => a.id === bill.accountId);
+                const overdue = isOverdue(bill);
                 return (
-                  <div key={bill.id} className="flex items-center justify-between p-3 rounded-xl border border-slate-100 hover:bg-slate-50 hover:shadow-sm transition-all">
+                  <div key={bill.id} className={`flex items-center justify-between p-3 rounded-xl border hover:shadow-sm transition-all ${overdue ? 'border-rose-200 bg-rose-50 hover:bg-rose-100' : 'border-slate-100 hover:bg-slate-50'}`}>
                     <div className="flex-1 min-w-0 mr-2">
                       <div className="flex items-center gap-1.5 mb-0.5">
                         <p className="font-medium truncate text-sm" style={{ color: theme.colors.neutral.black }}>{bill.description}</p>
                         <span className="text-xs font-black uppercase px-1.5 py-0.5 rounded" style={{ backgroundColor: account?.type === 'VARIABLE' ? '#DBEAFE' : '#EDE9FE', color: account?.type === 'VARIABLE' ? theme.colors.accent.blue : theme.colors.primary.purple }}>
                           {account?.type === 'VARIABLE' ? 'V' : 'F'}
                         </span>
+                        {overdue && (
+                          <span className="text-[9px] font-black uppercase px-1.5 py-0.5 rounded-full bg-rose-600 text-white">Atrasada</span>
+                        )}
                       </div>
                       <p className="text-xs text-slate-400 truncate font-bold uppercase tracking-tight">{supplier?.name || 'Fornecedor'}</p>
                     </div>
                     <div className="text-right shrink-0">
                       <p className="font-bold text-sm" style={{ color: theme.colors.neutral.black }}>{currencyFormatter(bill.amount)}</p>
-                      <p className={`text-xs font-black uppercase tracking-wider ${new Date(bill.dueDate) < new Date() ? 'text-rose-600' : 'text-slate-400'}`}>
+                      <p className={`text-xs font-black uppercase tracking-wider ${overdue ? 'text-rose-600' : 'text-slate-400'}`}>
                         {new Date(bill.dueDate).toLocaleDateString('pt-BR')}
                       </p>
                     </div>
                   </div>
                 );
-              })}
-            {filteredBills.filter(b => b.status !== BillStatus.PAID).length === 0 && (
-              <div className="text-center py-12">
-                <div className="text-slate-200 flex justify-center mb-2"><CreditCard size={32} /></div>
-                <p className="text-slate-400 text-sm font-bold uppercase">Nenhuma conta pendente</p>
-              </div>
-            )}
+              });
+            })()}
           </div>
         </div>
       </div>
