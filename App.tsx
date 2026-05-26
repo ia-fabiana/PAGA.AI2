@@ -1334,6 +1334,36 @@ const App: React.FC = () => {
     }
   };
 
+  const handleUpdateCaixaPequenoExpense = async (id: string, update: { description: string; date: string; amount: number; accountId: string }) => {
+    setBills(prev => prev.map(b => b.id !== id ? b : {
+      ...b,
+      description: update.description,
+      dueDate: update.date,
+      paidDate: update.date,
+      amount: update.amount,
+      paidAmount: update.amount,
+      accountId: update.accountId,
+    }));
+    if (!isMockMode && user) {
+      const billRef = doc(getSharedBillsRef(), id);
+      await updateDoc(billRef, {
+        description: update.description,
+        dueDate: update.date,
+        paidDate: update.date,
+        amount: update.amount,
+        paidAmount: update.amount,
+        accountId: update.accountId,
+      }).catch(e => console.error('Erro ao atualizar despesa:', e));
+    }
+  };
+
+  const handleDeleteCaixaPequenoExpense = async (id: string) => {
+    setBills(prev => prev.filter(b => b.id !== id));
+    if (!isMockMode && user) {
+      await deleteDoc(doc(getSharedBillsRef(), id)).catch(e => console.error('Erro ao excluir despesa:', e));
+    }
+  };
+
   const handleBulkCaixaPequenoImport = async (rows: Array<{ id: string; date: string; description: string; amount: number; accountId: string }>) => {
     const billsRef = getSharedBillsRef();
     const existingIds = new Set(bills.map(b => b.id));
@@ -2208,6 +2238,8 @@ const App: React.FC = () => {
                 onSaveConfig={handleSaveCaixaPequenoConfig}
                 onCreateExpense={handleCaixaPequenoExpense}
                 onBulkImportExpenses={handleBulkCaixaPequenoImport}
+                onUpdateExpense={handleUpdateCaixaPequenoExpense}
+                onDeleteExpense={handleDeleteCaixaPequenoExpense}
               />
             )}
             {view === 'team' && <TeamManagement team={team} setTeam={setTeamWithPersist} canManage={isEditor(currentUser.permissions?.team)} accounts={accounts} onResyncAccess={handleResyncWorkspaceAccess} />}

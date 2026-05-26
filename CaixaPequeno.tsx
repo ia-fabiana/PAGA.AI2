@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { Wallet, TrendingUp, TrendingDown, Settings, Save, Filter, X, PlusCircle, CheckCircle, Upload } from 'lucide-react';
+import { Wallet, TrendingUp, TrendingDown, Settings, Save, Filter, X, PlusCircle, CheckCircle, Upload, Pencil, Trash2 } from 'lucide-react';
 import { carregarTransacoesSalvas } from './trinks';
 import { Bill, CaixaPequenoConfig, ChartOfAccount } from './types';
 import { getBillDisplayPaidDate, getBillDisplayPaidAmount, isBillFullyPaid } from './billPaymentUtils';
@@ -27,6 +27,8 @@ interface Props {
   onSaveConfig: (config: CaixaPequenoConfig) => void;
   onCreateExpense: (expense: ExpenseEntry) => Promise<void>;
   onBulkImportExpenses?: (rows: CsvRow[]) => Promise<number>;
+  onUpdateExpense?: (id: string, update: { description: string; date: string; amount: number; accountId: string }) => Promise<void>;
+  onDeleteExpense?: (id: string) => Promise<void>;
 }
 
 function fmt(v: number) {
@@ -45,6 +47,8 @@ interface Movement {
   type: 'entrada' | 'saida';
   amount: number;
   source: 'trinks' | 'bill';
+  billId?: string;
+  accountId?: string;
 }
 
 function parseCsvText(text: string): string[][] {
@@ -101,7 +105,7 @@ function extractCsvRows(text: string, defaultAccountId: string): CsvRow[] {
   return result;
 }
 
-export const CaixaPequeno: React.FC<Props> = ({ bills, accounts, config, onSaveConfig, onCreateExpense, onBulkImportExpenses }) => {
+export const CaixaPequeno: React.FC<Props> = ({ bills, accounts, config, onSaveConfig, onCreateExpense, onBulkImportExpenses, onUpdateExpense, onDeleteExpense }) => {
   const now = new Date();
   const defaultFrom = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0];
   const defaultTo = new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().split('T')[0];
@@ -123,6 +127,15 @@ export const CaixaPequeno: React.FC<Props> = ({ bills, accounts, config, onSaveC
   const [expAccountId, setExpAccountId] = useState(accounts[0]?.id || '');
   const [expSaving, setExpSaving] = useState(false);
   const [expSaved, setExpSaved] = useState(false);
+
+  const accountMap = useMemo(() => Object.fromEntries(accounts.map(a => [a.id, a.name])), [accounts]);
+
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editDesc, setEditDesc] = useState('');
+  const [editDate, setEditDate] = useState('');
+  const [editAmount, setEditAmount] = useState('');
+  const [editAccountId, setEditAccountId] = useState('');
+  const [editSaving, setEditSaving] = useState(false);
 
   const [showImport, setShowImport] = useState(false);
   const [csvRows, setCsvRows] = useState<CsvRow[]>([]);
@@ -180,6 +193,8 @@ export const CaixaPequeno: React.FC<Props> = ({ bills, accounts, config, onSaveC
         type: 'saida',
         amount: getBillDisplayPaidAmount(b) ?? b.amount,
         source: 'bill',
+        billId: b.id,
+        accountId: b.accountId,
       });
     }
 
@@ -229,6 +244,37 @@ export const CaixaPequeno: React.FC<Props> = ({ bills, accounts, config, onSaveC
       return { ...m, balance: running };
     });
   }, [movements, allMovements, config.saldoInicial, dateFrom]);
+
+  const startEdit = (m: Movement & { billId?: string }) => {
+    if (!m.billId) return;
+    setEditingId(m.billId);
+    setEditDesc(m.description);
+    setEditDate(m.date);
+    setEditAmount(m.amount.toFixed(2).replace('.', ','));
+    const bill = bills.find(b => b.id === m.billId);
+    setEditAccountId(bill?.accountId || '');
+  };
+
+  const cancelEdit = () => setEditingId(null);
+
+  const saveEdit = async () => {
+    if (!editingId || !onUpdateExpense) return;
+    const amount = parseFloat(editAmount.replace(/\./g, '').replace(',', '.'));
+    if (!amount || amount <= 0 || !editDesc.trim() || !editDate) return;
+    setEditSaving(true);
+    try {
+      await onUpdateExpense(editingId, { description: editDesc.trim(), date: editDate, amount, accountId: editAccountId });
+      setEditingId(null);
+    } finally {
+      setEditSaving(false);
+    }
+  };
+
+  const handleDelete = async (billId: string) => {
+    if (!onDeleteExpense) return;
+    if (!window.confirm('Excluir este lançamento?')) return;
+    await onDeleteExpense(billId);
+  };
 
   const handleCsvFile = (file: File) => {
     setCsvDone(null);
@@ -573,24 +619,106 @@ export const CaixaPequeno: React.FC<Props> = ({ bills, accounts, config, onSaveC
                 <div className="col-span-2 text-sm font-black text-right text-amber-700">{fmt(config.saldoInicial)}</div>
               </div>
             )}
-            {movementsWithBalance.map((m, i) => (
-              <div key={i} className="grid grid-cols-12 items-center px-6 py-3 hover:bg-slate-50 transition-colors">
-                <div className="col-span-2 text-xs font-semibold text-slate-500">{fmtDate(m.date)}</div>
-                <div className="col-span-1 flex items-center">
-                  {m.type === 'entrada'
-                    ? <span className="text-[10px] font-black bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full uppercase">Entrada</span>
-                    : <span className="text-[10px] font-black bg-red-100 text-red-600 px-2 py-0.5 rounded-full uppercase">Saída</span>
-                  }
+            {movementsWithBalance.map((m, i) => {
+              const isEditing = editingId === m.billId && m.billId;
+              const canEdit = m.source === 'bill' && !!m.billId;
+              const accountName = m.accountId ? accountMap[m.accountId] : null;
+
+              if (isEditing) {
+                return (
+                  <div key={i} className="px-6 py-3 bg-amber-50 border-l-2 border-amber-400 space-y-2">
+                    <div className="flex flex-wrap gap-2">
+                      <input
+                        type="date"
+                        value={editDate}
+                        onChange={e => setEditDate(e.target.value)}
+                        className="border border-slate-200 rounded-lg px-2 py-1 text-xs outline-none focus:ring-2 focus:ring-amber-400"
+                      />
+                      <input
+                        type="text"
+                        value={editDesc}
+                        onChange={e => setEditDesc(e.target.value)}
+                        className="flex-1 min-w-32 border border-slate-200 rounded-lg px-2 py-1 text-xs outline-none focus:ring-2 focus:ring-amber-400"
+                        placeholder="Descrição"
+                      />
+                      <input
+                        type="text"
+                        value={editAmount}
+                        onChange={e => setEditAmount(e.target.value)}
+                        className="w-24 border border-slate-200 rounded-lg px-2 py-1 text-xs outline-none focus:ring-2 focus:ring-amber-400"
+                        placeholder="0,00"
+                      />
+                      <select
+                        value={editAccountId}
+                        onChange={e => setEditAccountId(e.target.value)}
+                        className="border border-slate-200 rounded-lg px-2 py-1 text-xs outline-none focus:ring-2 focus:ring-amber-400 bg-white"
+                      >
+                        <option value="">— Centro de custo —</option>
+                        {accounts.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+                      </select>
+                    </div>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={saveEdit}
+                        disabled={editSaving}
+                        className="flex items-center gap-1 text-xs font-bold px-3 py-1 rounded-lg bg-amber-500 text-white hover:bg-amber-600 disabled:opacity-50"
+                      >
+                        <Save size={11} />{editSaving ? 'Salvando...' : 'Salvar'}
+                      </button>
+                      <button
+                        onClick={cancelEdit}
+                        className="flex items-center gap-1 text-xs font-bold px-3 py-1 rounded-lg bg-slate-100 text-slate-500 hover:bg-slate-200"
+                      >
+                        <X size={11} />Cancelar
+                      </button>
+                    </div>
+                  </div>
+                );
+              }
+
+              return (
+                <div key={i} className="group flex items-center gap-3 px-6 py-3 hover:bg-slate-50 transition-colors">
+                  <div className="w-20 text-xs font-semibold text-slate-500 shrink-0">{fmtDate(m.date)}</div>
+                  <div className="shrink-0">
+                    {m.type === 'entrada'
+                      ? <span className="text-[10px] font-black bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full uppercase">Entrada</span>
+                      : <span className="text-[10px] font-black bg-red-100 text-red-600 px-2 py-0.5 rounded-full uppercase">Saída</span>
+                    }
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm text-slate-700 truncate">{m.description}</p>
+                    {accountName && (
+                      <p className="text-[11px] text-slate-400 truncate">{accountName}</p>
+                    )}
+                  </div>
+                  <div className={`w-28 text-sm font-bold text-right shrink-0 ${m.type === 'entrada' ? 'text-emerald-600' : 'text-red-500'}`}>
+                    {m.type === 'entrada' ? '+' : '-'}{fmt(m.amount)}
+                  </div>
+                  <div className="w-28 text-sm font-black text-right shrink-0" style={{ color: m.balance >= 0 ? '#B45309' : '#DC2626' }}>
+                    {fmt(m.balance)}
+                  </div>
+                  {canEdit && (
+                    <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
+                      <button
+                        onClick={() => startEdit(m)}
+                        className="p-1.5 rounded-lg text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 transition-colors"
+                        title="Editar"
+                      >
+                        <Pencil size={13} />
+                      </button>
+                      <button
+                        onClick={() => handleDelete(m.billId!)}
+                        className="p-1.5 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50 transition-colors"
+                        title="Excluir"
+                      >
+                        <Trash2 size={13} />
+                      </button>
+                    </div>
+                  )}
+                  {!canEdit && <div className="w-14 shrink-0" />}
                 </div>
-                <div className="col-span-5 text-sm text-slate-700 truncate pl-2">{m.description}</div>
-                <div className={`col-span-2 text-sm font-bold text-right ${m.type === 'entrada' ? 'text-emerald-600' : 'text-red-500'}`}>
-                  {m.type === 'entrada' ? '+' : '-'}{fmt(m.amount)}
-                </div>
-                <div className="col-span-2 text-sm font-black text-right" style={{ color: m.balance >= 0 ? '#B45309' : '#DC2626' }}>
-                  {fmt(m.balance)}
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>
