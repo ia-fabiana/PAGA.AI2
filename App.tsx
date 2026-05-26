@@ -2124,7 +2124,7 @@ const App: React.FC = () => {
     'cashbox-report': 'Relatorio de Caixa',
     'cashbox-entry': 'Lancamentos Caixa',
     reconciliation: 'Extrato Bancario',
-    'caixa-pequeno': 'Caixa Pequeno',
+    'caixa-pequeno': 'Dinheiro',
   };
 
   return (

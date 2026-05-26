@@ -249,7 +249,7 @@ export const BillList: React.FC<BillListProps> = ({
         formatCurrency(bill.amount),
         formatDatePtBR(getBillDisplayPaidDate(bill)),
         formatCurrency(getBillDisplayPaidAmount(bill)),
-        paymentSource === 'bank' ? 'Banco' : paymentSource === 'caixa_pequeno' ? 'Caixa Pequeno' : paymentSource === 'manual' ? 'Manual' : '—',
+        paymentSource === 'bank' ? 'Banco' : paymentSource === 'caixa_pequeno' ? 'Dinheiro' : paymentSource === 'manual' ? 'Manual' : '—',
         computedStatus,
       ];
     });
@@ -778,7 +778,7 @@ export const BillList: React.FC<BillListProps> = ({
                       <span className="rounded-full bg-emerald-100 px-2 py-1 font-bold uppercase text-emerald-700">Manual</span>
                     )}
                     {paymentSource === 'caixa_pequeno' && (
-                      <span className="rounded-full bg-amber-100 px-2 py-1 font-bold uppercase text-amber-700">Caixa Pequeno</span>
+                      <span className="rounded-full bg-amber-100 px-2 py-1 font-bold uppercase text-amber-700">Dinheiro</span>
                     )}
                   </div>
                 </div>

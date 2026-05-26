@@ -341,7 +341,7 @@ export const CaixaPequeno: React.FC<Props> = ({ bills, accounts, config, onSaveC
             <Wallet size={28} className="text-amber-600" />
           </div>
           <div>
-            <h1 className="text-3xl font-black" style={{ color: theme.colors.neutral.black }}>Caixa Pequeno</h1>
+            <h1 className="text-3xl font-black" style={{ color: theme.colors.neutral.black }}>Dinheiro</h1>
             <p className="text-slate-500 text-sm font-medium">Fluxo de caixa em dinheiro · Saldo desde {fmtDate(config.saldoInicialData)}</p>
           </div>
         </div>
