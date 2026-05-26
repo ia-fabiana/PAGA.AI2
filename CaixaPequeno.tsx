@@ -603,11 +603,9 @@ export const CaixaPequeno: React.FC<Props> = ({ bills, accounts, config, onSaveC
 
         {trinksLoading ? (
           <div className="py-12 text-center text-slate-400 text-sm animate-pulse">Carregando...</div>
-        ) : movementsWithBalance.length === 0 ? (
-          <div className="py-12 text-center text-slate-400 text-sm">Nenhuma movimentação no período.</div>
         ) : (
           <div className="divide-y divide-slate-50">
-            {/* Saldo inicial — só aparece quando o período filtrado inclui a data de saldo inicial */}
+            {/* Saldo inicial — aparece quando a data de saldo inicial está dentro do período filtrado */}
             {config.saldoInicialData >= dateFrom && config.saldoInicialData <= dateTo && (
               <div className="grid grid-cols-12 items-center px-6 py-3 bg-amber-50">
                 <div className="col-span-2 text-xs font-semibold text-slate-500">{fmtDate(config.saldoInicialData)}</div>
@@ -618,6 +616,9 @@ export const CaixaPequeno: React.FC<Props> = ({ bills, accounts, config, onSaveC
                 <div className="col-span-2 text-sm font-bold text-right text-amber-600">{fmt(config.saldoInicial)}</div>
                 <div className="col-span-2 text-sm font-black text-right text-amber-700">{fmt(config.saldoInicial)}</div>
               </div>
+            )}
+            {movementsWithBalance.length === 0 && !(config.saldoInicialData >= dateFrom && config.saldoInicialData <= dateTo) && (
+              <div className="py-12 text-center text-slate-400 text-sm">Nenhuma movimentação no período.</div>
             )}
             {movementsWithBalance.map((m, i) => {
               const isEditing = editingId === m.billId && m.billId;
@@ -660,8 +661,8 @@ export const CaixaPequeno: React.FC<Props> = ({ bills, accounts, config, onSaveC
                     <div className="flex gap-2">
                       <button
                         onClick={saveEdit}
-                        disabled={editSaving}
-                        className="flex items-center gap-1 text-xs font-bold px-3 py-1 rounded-lg bg-amber-500 text-white hover:bg-amber-600 disabled:opacity-50"
+                        disabled={editSaving || !editDesc.trim() || !editDate || !editAmount}
+                        className="flex items-center gap-1 text-xs font-bold px-3 py-1 rounded-lg bg-amber-500 text-white hover:bg-amber-600 disabled:opacity-50 disabled:cursor-not-allowed"
                       >
                         <Save size={11} />{editSaving ? 'Salvando...' : 'Salvar'}
                       </button>

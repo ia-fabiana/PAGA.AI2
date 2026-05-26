@@ -817,7 +817,7 @@ export const BillList: React.FC<BillListProps> = ({
                       <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Pago em</p>
                       {paymentSource && (
                         <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold uppercase ${bankPayment ? 'bg-blue-100 text-blue-700' : paymentSource === 'caixa_pequeno' ? 'bg-amber-100 text-amber-700' : 'bg-emerald-100 text-emerald-700'}`}>
-                          {bankPayment ? 'Banco' : paymentSource === 'caixa_pequeno' ? 'Cx. Pequeno' : 'Manual'}
+                          {bankPayment ? 'Banco' : paymentSource === 'caixa_pequeno' ? 'Dinheiro' : 'Manual'}
                         </span>
                       )}
                     </div>
@@ -839,7 +839,7 @@ export const BillList: React.FC<BillListProps> = ({
                                   }}
                                   className={`flex-1 rounded-lg px-2 py-1 text-[10px] font-bold uppercase transition-colors ${active ? (method === 'caixa_pequeno' ? 'bg-amber-100 text-amber-700' : 'bg-emerald-100 text-emerald-700') : 'bg-slate-100 text-slate-400 hover:bg-slate-200'}`}
                                 >
-                                  {method === 'caixa_pequeno' ? 'Cx. Pequeno' : 'Manual'}
+                                  {method === 'caixa_pequeno' ? 'Dinheiro' : 'Manual'}
                                 </button>
                               );
                             })}
