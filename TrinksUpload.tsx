@@ -123,6 +123,17 @@ export const TrinksUpload: React.FC<Props> = ({ onComplete }) => {
         return;
       }
 
+      // Delete API-imported transactions for the same date range before importing CSV,
+      // preventing duplicates since API and CSV use different docId formats.
+      const dates = (transactions.map(t => t.date as string)).filter(Boolean).sort();
+      if (dates.length > 0) {
+        setMessage('Removendo importações anteriores do período...');
+        await fetch(`/api/import-trinks-transactions?date_from=${dates[0]}&date_to=${dates[dates.length - 1]}&include_csv=true`, {
+          method: 'DELETE',
+          headers: { 'x-api-key': IMPORT_SECRET },
+        });
+      }
+
       setStatus('uploading');
       const BATCH = 100;
       let saved = 0;
