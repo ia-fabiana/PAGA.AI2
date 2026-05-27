@@ -56,7 +56,7 @@ async function rowToTransaction(row: string[]): Promise<Record<string, unknown> 
   if (outros > 0) formasPagamentos.push({ nome: 'Outros', valor: outros, parcelas: 1 });
 
   // Use only datePag (date part, not timestamp) so docId is stable across different CSV exports.
-  const hash = await sha1Slice8(`${dateAtend}_${datePag}_${clientId}_${total.toFixed(2)}`);
+  const hash = await sha1Slice8(`${dateAtend}_${datePag}_${clientId}_${total}`);
   const docId = `trinks_${ESTABLISHMENT_ID}_csv_${hash}`;
 
   return {
