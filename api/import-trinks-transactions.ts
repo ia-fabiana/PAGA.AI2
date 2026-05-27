@@ -80,7 +80,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const docId = t._docId as string;
     if (!docId) continue;
     const { _docId, ...data } = t;
-    await db.collection('trinks_transactions').doc(docId).set(data, { merge: true });
+    await db.collection('trinks_transactions').doc(docId).set(data);
     saved++;
   }
 
