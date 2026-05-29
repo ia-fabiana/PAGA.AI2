@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { db } from './firebase';
 import { collection, getDocs, query, where, orderBy, setDoc, doc, updateDoc } from 'firebase/firestore';
 import { CashBoxData, TeamMember, PaymentMethod } from './types';
-import { AlertCircle, CheckCircle, AlertTriangle, Eye, Edit2, Save, X, Settings, BarChart3 } from 'lucide-react';
+import { AlertCircle, CheckCircle, AlertTriangle, Eye, Edit2, Save, X, Settings, BarChart3, Printer } from 'lucide-react';
 import { PaymentMethodManager } from './PaymentMethodManager';
 
 interface CashBoxProps {
@@ -210,6 +210,81 @@ export const CashBox: React.FC<CashBoxProps> = ({ user, onShowReport, onShowTrin
     return '';
   };
 
+  const openPrint = () => {
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) return;
+
+    const periodLabel = new Date(selectedYear, selectedMonth - 1)
+      .toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })
+      .toUpperCase();
+
+    const headerCells = methods.map(m =>
+      `<th style="border:1px solid #ccc;padding:7px 10px;background:#1e293b;color:white;text-align:center;">${m.name}</th>`
+    ).join('');
+
+    const rowsHTML = entries.map(entry => {
+      const methodCells = methods.map(m => {
+        const val = (entry as any)[`${m.name.toLowerCase()}Total`] as number || 0;
+        return `<td style="border:1px solid #ccc;padding:5px 8px;text-align:right;">${val.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</td>`;
+      }).join('');
+      const diff = (entry.informedTotal || 0) - entry.grandTotal;
+      const diffColor = diff === 0 ? '#15803d' : diff > 0 ? '#1d4ed8' : '#dc2626';
+      const statusLabel = entry.status === 'ok' ? 'OK' : entry.status === 'warning' ? 'Atenção' : entry.status === 'error' ? 'Divergência' : 'Pendente';
+      const rowBg = entry.isWeekendOrHoliday ? 'background:#fef9c3;' : '';
+      return `<tr>
+        <td style="border:1px solid #ccc;padding:5px 8px;${rowBg}">${formatDate(entry.date)}</td>
+        ${methodCells}
+        <td style="border:1px solid #ccc;padding:5px 8px;text-align:right;font-weight:bold;">${entry.grandTotal.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</td>
+        <td style="border:1px solid #ccc;padding:5px 8px;text-align:right;color:#1d4ed8;font-weight:bold;">${(entry.informedTotal || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</td>
+        <td style="border:1px solid #ccc;padding:5px 8px;text-align:right;font-weight:bold;color:${diffColor};">${diff.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</td>
+        <td style="border:1px solid #ccc;padding:5px 8px;text-align:center;font-size:10px;">${statusLabel}</td>
+      </tr>`;
+    }).join('');
+
+    printWindow.document.write(`
+      <!DOCTYPE html><html>
+      <head>
+        <meta charset="UTF-8">
+        <title>Caixa — ${periodLabel}</title>
+        <style>
+          body { font-family: Arial, sans-serif; padding: 20px; color: #1e293b; }
+          h1 { font-size: 16px; margin: 0 0 4px; font-weight: 900; }
+          h2 { font-size: 12px; color: #64748b; margin: 0 0 16px; }
+          table { border-collapse: collapse; width: 100%; font-size: 11px; }
+          .actions { display: flex; gap: 10px; margin-top: 18px; justify-content: center; }
+          .btn { padding: 8px 22px; border: none; border-radius: 6px; font-size: 13px; font-weight: bold; cursor: pointer; }
+          .btn-print { background: #1e293b; color: white; }
+          .btn-close { background: #e2e8f0; color: #1e293b; }
+          p.footer { font-size: 10px; color: #94a3b8; margin-top: 12px; }
+          @media print { .actions { display: none; } }
+        </style>
+      </head>
+      <body>
+        <h1>CAIXA — LANÇAMENTOS</h1>
+        <h2>${periodLabel}</h2>
+        <table>
+          <thead>
+            <tr>
+              <th style="border:1px solid #ccc;padding:7px 10px;background:#1e293b;color:white;text-align:left;">Data</th>
+              ${headerCells}
+              <th style="border:1px solid #ccc;padding:7px 10px;background:#1e293b;color:white;text-align:right;">Soma</th>
+              <th style="border:1px solid #ccc;padding:7px 10px;background:#1d4ed8;color:white;text-align:right;">Total Caixa</th>
+              <th style="border:1px solid #ccc;padding:7px 10px;background:#1e293b;color:white;text-align:right;">Diferença</th>
+              <th style="border:1px solid #ccc;padding:7px 10px;background:#1e293b;color:white;text-align:center;">Status</th>
+            </tr>
+          </thead>
+          <tbody>${rowsHTML}</tbody>
+        </table>
+        <p class="footer">Relatório gerado em ${new Date().toLocaleDateString('pt-BR')}</p>
+        <div class="actions">
+          <button class="btn btn-print" onclick="window.print()">🖨️ Imprimir</button>
+          <button class="btn btn-close" onclick="window.close()">✕ Fechar</button>
+        </div>
+      </body></html>
+    `);
+    printWindow.document.close();
+  };
+
   return (
     <div className="flex flex-col flex-1 bg-slate-50 p-6 overflow-y-auto">
       <div className="max-w-7xl mx-auto w-full space-y-6">
@@ -257,6 +332,13 @@ export const CashBox: React.FC<CashBoxProps> = ({ user, onShowReport, onShowTrin
                 title="Ver relatório mensal"
               >
                 <BarChart3 size={20} />
+              </button>
+              <button
+                onClick={openPrint}
+                className="p-2 bg-slate-100 text-slate-600 rounded-lg hover:bg-slate-200 transition-colors"
+                title="Imprimir lançamentos"
+              >
+                <Printer size={20} />
               </button>
               {onShowTrinksReconciliation && (
                 <button

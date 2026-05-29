@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { Wallet, TrendingUp, TrendingDown, Settings, Save, Filter, X, PlusCircle, CheckCircle, Upload, Pencil, Trash2 } from 'lucide-react';
+import { Wallet, TrendingUp, TrendingDown, Settings, Save, Filter, X, PlusCircle, CheckCircle, Upload, Pencil, Trash2, Printer } from 'lucide-react';
 import { carregarTransacoesSalvas } from './trinks';
 import { Bill, CaixaPequenoConfig, ChartOfAccount } from './types';
 import { getBillDisplayPaidDate, getBillDisplayPaidAmount, isBillFullyPaid } from './billPaymentUtils';
@@ -332,6 +332,91 @@ export const CaixaPequeno: React.FC<Props> = ({ bills, accounts, config, onSaveC
     }
   };
 
+  const openPrint = () => {
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) return;
+
+    const periodLabel = `${fmtDate(dateFrom)} a ${fmtDate(dateTo)}`;
+
+    const rowsHTML = [
+      ...(config.saldoInicialData >= dateFrom && config.saldoInicialData <= dateTo ? [`
+        <tr style="background:#fef3c7;">
+          <td style="border:1px solid #e5e7eb;padding:5px 8px;">${fmtDate(config.saldoInicialData)}</td>
+          <td style="border:1px solid #e5e7eb;padding:5px 8px;text-align:center;"><span style="background:#fde68a;color:#92400e;font-size:9px;font-weight:900;padding:1px 6px;border-radius:99px;">INICIAL</span></td>
+          <td style="border:1px solid #e5e7eb;padding:5px 8px;" colspan="2">Saldo inicial</td>
+          <td style="border:1px solid #e5e7eb;padding:5px 8px;text-align:right;font-weight:bold;color:#b45309;">${fmt(config.saldoInicial)}</td>
+          <td style="border:1px solid #e5e7eb;padding:5px 8px;text-align:right;font-weight:900;color:#b45309;">${fmt(config.saldoInicial)}</td>
+        </tr>`] : []),
+      ...movementsWithBalance.map(m => {
+        const typeLabel = m.type === 'entrada' ? 'Entrada' : 'Saída';
+        const typeColor = m.type === 'entrada' ? '#15803d' : '#dc2626';
+        const amtSign = m.type === 'entrada' ? '+' : '-';
+        const balColor = m.balance >= 0 ? '#b45309' : '#dc2626';
+        const accName = m.accountId ? (accountMap[m.accountId] || '') : '';
+        return `<tr>
+          <td style="border:1px solid #e5e7eb;padding:5px 8px;">${fmtDate(m.date)}</td>
+          <td style="border:1px solid #e5e7eb;padding:5px 8px;text-align:center;"><span style="color:${typeColor};font-size:9px;font-weight:900;">${typeLabel}</span></td>
+          <td style="border:1px solid #e5e7eb;padding:5px 8px;">${m.description}</td>
+          <td style="border:1px solid #e5e7eb;padding:5px 8px;font-size:10px;color:#94a3b8;">${accName}</td>
+          <td style="border:1px solid #e5e7eb;padding:5px 8px;text-align:right;font-weight:bold;color:${typeColor};">${amtSign}${fmt(m.amount)}</td>
+          <td style="border:1px solid #e5e7eb;padding:5px 8px;text-align:right;font-weight:900;color:${balColor};">${fmt(m.balance)}</td>
+        </tr>`;
+      }),
+    ].join('');
+
+    printWindow.document.write(`
+      <!DOCTYPE html><html>
+      <head>
+        <meta charset="UTF-8">
+        <title>Dinheiro — ${periodLabel}</title>
+        <style>
+          body { font-family: Arial, sans-serif; padding: 20px; color: #1e293b; }
+          h1 { font-size: 16px; margin: 0 0 4px; font-weight: 900; }
+          h2 { font-size: 12px; color: #64748b; margin: 0 0 16px; }
+          table { border-collapse: collapse; width: 100%; font-size: 11px; }
+          .kpis { display: flex; gap: 24px; margin-bottom: 14px; }
+          .kpi { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 8px 14px; }
+          .kpi-label { font-size: 10px; color: #94a3b8; font-weight: 700; text-transform: uppercase; }
+          .kpi-value { font-size: 15px; font-weight: 900; }
+          .actions { display: flex; gap: 10px; margin-top: 18px; justify-content: center; }
+          .btn { padding: 8px 22px; border: none; border-radius: 6px; font-size: 13px; font-weight: bold; cursor: pointer; }
+          .btn-print { background: #1e293b; color: white; }
+          .btn-close { background: #e2e8f0; color: #1e293b; }
+          p.footer { font-size: 10px; color: #94a3b8; margin-top: 12px; }
+          @media print { .actions { display: none; } }
+        </style>
+      </head>
+      <body>
+        <h1>DINHEIRO — FLUXO DE CAIXA</h1>
+        <h2>Período: ${periodLabel}</h2>
+        <div class="kpis">
+          <div class="kpi"><div class="kpi-label">Saldo Atual</div><div class="kpi-value" style="color:#b45309;">${fmt(saldoAtual)}</div></div>
+          <div class="kpi"><div class="kpi-label">Entradas</div><div class="kpi-value" style="color:#15803d;">+${fmt(totalEntradas)}</div></div>
+          <div class="kpi"><div class="kpi-label">Saídas</div><div class="kpi-value" style="color:#dc2626;">-${fmt(totalSaidas)}</div></div>
+        </div>
+        <table>
+          <thead>
+            <tr>
+              <th style="border:1px solid #ccc;padding:7px 8px;background:#1e293b;color:white;text-align:left;">Data</th>
+              <th style="border:1px solid #ccc;padding:7px 8px;background:#1e293b;color:white;text-align:center;">Tipo</th>
+              <th style="border:1px solid #ccc;padding:7px 8px;background:#1e293b;color:white;text-align:left;">Descrição</th>
+              <th style="border:1px solid #ccc;padding:7px 8px;background:#1e293b;color:white;text-align:left;">Centro de Custo</th>
+              <th style="border:1px solid #ccc;padding:7px 8px;background:#1e293b;color:white;text-align:right;">Valor</th>
+              <th style="border:1px solid #ccc;padding:7px 8px;background:#b45309;color:white;text-align:right;">Saldo</th>
+            </tr>
+          </thead>
+          <tbody>${rowsHTML}</tbody>
+        </table>
+        <p class="footer">Relatório gerado em ${new Date().toLocaleDateString('pt-BR')}</p>
+        <div class="actions">
+          <button class="btn btn-print" onclick="window.print()">🖨️ Imprimir</button>
+          <button class="btn btn-close" onclick="window.close()">✕ Fechar</button>
+        </div>
+      </body></html>
+    `);
+    printWindow.document.close();
+  };
+
   return (
     <div className="space-y-6 animate-in fade-in duration-500" style={{ backgroundColor: theme.colors.neutral.bgMain, minHeight: '100vh', padding: '2rem' }}>
 
@@ -346,13 +431,22 @@ export const CaixaPequeno: React.FC<Props> = ({ bills, accounts, config, onSaveC
             <p className="text-slate-500 text-sm font-medium">Fluxo de caixa em dinheiro · Saldo desde {fmtDate(config.saldoInicialData)}</p>
           </div>
         </div>
-        <button
-          onClick={() => setShowConfig(v => !v)}
-          className="flex items-center gap-2 text-xs font-bold px-4 py-2 rounded-xl uppercase transition-all bg-white border border-slate-200 text-slate-600 hover:bg-slate-50"
-        >
-          <Settings size={14} />
-          Saldo Inicial
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={openPrint}
+            className="flex items-center gap-2 text-xs font-bold px-4 py-2 rounded-xl uppercase transition-all bg-white border border-slate-200 text-slate-600 hover:bg-slate-50"
+          >
+            <Printer size={14} />
+            Imprimir
+          </button>
+          <button
+            onClick={() => setShowConfig(v => !v)}
+            className="flex items-center gap-2 text-xs font-bold px-4 py-2 rounded-xl uppercase transition-all bg-white border border-slate-200 text-slate-600 hover:bg-slate-50"
+          >
+            <Settings size={14} />
+            Saldo Inicial
+          </button>
+        </div>
       </header>
 
       {/* Config panel */}
