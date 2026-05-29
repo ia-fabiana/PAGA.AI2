@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { db } from './firebase';
 import { collection, getDocs, query, where, orderBy, setDoc, doc } from 'firebase/firestore';
+import { listSavedBankReconciliations } from './bankReconciliationStore';
 import {
   sincronizarTrinks,
   carregarTransacoesSalvas,
@@ -78,6 +79,7 @@ export const TrinksReconciliation: React.FC<Props> = ({ user, onBack, onShowRepo
   const [uploadParsed, setUploadParsed] = useState<{ date: string; amount: number }[]>([]);
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState('');
+  const [loadingBank, setLoadingBank] = useState(false);
   const uploadRef = useRef<HTMLInputElement>(null);
 
   const parseRedeCSV = (text: string): { date: string; amount: number }[] => {
@@ -117,6 +119,41 @@ export const TrinksReconciliation: React.FC<Props> = ({ user, onBack, onShowRepo
       }
     };
     reader.readAsText(file, 'UTF-8');
+  };
+
+  const loadInterFromBankStatement = async () => {
+    setLoadingBank(true);
+    setUploadError('');
+    setUploadParsed([]);
+    try {
+      const statements = await listSavedBankReconciliations();
+      const monthStatement = statements.find(s => s.statementMonth === mesISO && s.isActiveVersion);
+      if (!monthStatement) {
+        setUploadError(`Nenhum extrato bancário importado para ${nomesMes[selectedMonth - 1]}/${selectedYear}. Importe primeiro na seção Extrato Bancário.`);
+        return;
+      }
+      const pixCredits = monthStatement.transactions.filter(t =>
+        t.type === 'CREDIT' && t.description.toLowerCase().includes('pix')
+      );
+      if (pixCredits.length === 0) {
+        setUploadError('Nenhuma entrada de PIX encontrada no extrato deste mês.');
+        return;
+      }
+      const totals: Record<string, number> = {};
+      for (const t of pixCredits) {
+        totals[t.date] = (totals[t.date] || 0) + t.amount;
+      }
+      setUploadParsed(
+        Object.entries(totals)
+          .map(([date, amount]) => ({ date, amount }))
+          .sort((a, b) => a.date.localeCompare(b.date))
+      );
+    } catch (e) {
+      setUploadError('Erro ao carregar extrato bancário.');
+      console.error(e);
+    } finally {
+      setLoadingBank(false);
+    }
   };
 
   const handleConfirmUpload = async () => {
@@ -813,20 +850,36 @@ export const TrinksReconciliation: React.FC<Props> = ({ user, onBack, onShowRepo
               </div>
 
               <div className="mb-4">
-                <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Arquivo CSV</label>
-                <input
-                  ref={uploadRef}
-                  type="file"
-                  accept=".csv,text/csv"
-                  className="hidden"
-                  onChange={e => { const f = e.target.files?.[0]; if (f) handleUploadFile(f); e.target.value = ''; }}
-                />
-                <button
-                  onClick={() => uploadRef.current?.click()}
-                  className="flex items-center gap-2 px-4 py-3 border-2 border-dashed border-slate-300 rounded-xl text-sm text-slate-500 hover:border-indigo-400 hover:text-indigo-600 transition-colors w-full justify-center"
-                >
-                  <Upload size={16} /> Selecionar arquivo CSV
-                </button>
+                {uploadProvider === 'inter' ? (
+                  <div>
+                    <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Fonte dos dados</label>
+                    <button
+                      onClick={loadInterFromBankStatement}
+                      disabled={loadingBank}
+                      className="flex items-center gap-2 px-4 py-3 border-2 border-indigo-200 bg-indigo-50 rounded-xl text-sm text-indigo-700 font-semibold hover:bg-indigo-100 transition-colors w-full justify-center disabled:opacity-60"
+                    >
+                      🏦 {loadingBank ? 'Carregando extrato...' : 'Carregar PIX do Extrato Bancário'}
+                    </button>
+                    <p className="text-xs text-slate-400 mt-2">Busca automaticamente as entradas de PIX do extrato Inter já importado neste mês.</p>
+                  </div>
+                ) : (
+                  <div>
+                    <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Arquivo CSV</label>
+                    <input
+                      ref={uploadRef}
+                      type="file"
+                      accept=".csv,text/csv"
+                      className="hidden"
+                      onChange={e => { const f = e.target.files?.[0]; if (f) handleUploadFile(f); e.target.value = ''; }}
+                    />
+                    <button
+                      onClick={() => uploadRef.current?.click()}
+                      className="flex items-center gap-2 px-4 py-3 border-2 border-dashed border-slate-300 rounded-xl text-sm text-slate-500 hover:border-indigo-400 hover:text-indigo-600 transition-colors w-full justify-center"
+                    >
+                      <Upload size={16} /> Selecionar arquivo CSV
+                    </button>
+                  </div>
+                )}
                 {uploadError && <p className="text-xs text-red-500 font-medium mt-2">{uploadError}</p>}
               </div>
 
