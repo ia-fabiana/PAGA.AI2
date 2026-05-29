@@ -14,13 +14,13 @@ import {
 import { CashBoxData, TeamMember } from './types';
 import {
   RefreshCw, ChevronDown, ChevronUp, CheckCircle, AlertTriangle, XCircle,
-  Download, Edit2, Save, X, Eye, Printer,
+  Download, Edit2, Save, X, Eye,
 } from 'lucide-react';
 
 interface Props {
   user: TeamMember;
   onBack: () => void;
-  onShowCashBoxEntry?: () => void;
+  onShowReport?: () => void;
 }
 
 const COLUNAS = ['din', 'rede', 'pagSeg', 'inter', 'frog'] as const;
@@ -53,7 +53,7 @@ function rowBg(status: ReturnType<typeof diffStatus>) {
   return 'bg-slate-50';
 }
 
-export const TrinksReconciliation: React.FC<Props> = ({ user, onBack, onShowCashBoxEntry }) => {
+export const TrinksReconciliation: React.FC<Props> = ({ user, onBack, onShowReport }) => {
   const currentDate = new Date();
   const [selectedMonth, setSelectedMonth] = useState(currentDate.getMonth() + 1);
   const [selectedYear, setSelectedYear] = useState(currentDate.getFullYear());
@@ -377,12 +377,14 @@ export const TrinksReconciliation: React.FC<Props> = ({ user, onBack, onShowCash
               >
                 <Eye size={16} /> Visualizar
               </button>
-              <button
-                onClick={() => openPrintPreview(true)}
-                className="flex items-center gap-2 px-3 py-2 bg-indigo-100 text-indigo-700 rounded-lg text-sm font-semibold hover:bg-indigo-200"
-              >
-                <Printer size={16} /> Imprimir
-              </button>
+              {onShowReport && (
+                <button
+                  onClick={onShowReport}
+                  className="flex items-center gap-2 px-3 py-2 bg-slate-100 text-slate-700 rounded-lg text-sm font-semibold hover:bg-slate-200"
+                >
+                  Conf. Mensal
+                </button>
+              )}
               {consumo != null && (
                 <div className={`flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-bold ${consumoBadgeColor}`} title={JSON.stringify(consumo, null, 2)}>
                   <span>API</span>

@@ -10,7 +10,6 @@ import { TeamManagement } from './TeamManagement';
 import { CompanyProfile } from './CompanyProfile';
 import { AccountManagement } from './AccountManagement';
 import { DRE } from './DRE';
-import { CashBox } from './CashBox';
 import { CashBoxReport } from './CashBoxReport';
 import { BankReconciliationComponent } from './BankReconciliationComponent';
 import { TrinksReconciliation } from './TrinksReconciliation';
@@ -2227,9 +2226,8 @@ const App: React.FC = () => {
             )}
             {view === 'accounts' && <AccountManagement accounts={accounts} setAccounts={setAccountsWithPersist} canManage={isEditor(currentUser.permissions?.accounts)} />}
             {view === 'dre' && <DRE bills={bills} revenues={revenues} accounts={accounts} setRevenues={setRevenuesWithPersist} />}
-            {view === 'cashbox' && <TrinksReconciliation user={currentUser} onBack={() => setView('dashboard')} onShowCashBoxEntry={() => setView('cashbox-entry')} />}
-            {view === 'cashbox-entry' && <CashBox user={currentUser} onShowReport={() => setView('cashbox-report')} onShowTrinksReconciliation={() => setView('cashbox')} />}
-            {view === 'cashbox-report' && <CashBoxReport onBack={() => setView('cashbox-entry')} canEdit={currentUser.permissions?.canEditCashBoxStatus} />}
+            {view === 'cashbox' && <TrinksReconciliation user={currentUser} onBack={() => setView('dashboard')} onShowReport={() => setView('cashbox-report')} />}
+            {view === 'cashbox-report' && <CashBoxReport onBack={() => setView('cashbox')} canEdit={currentUser.permissions?.canEditCashBoxStatus} />}
             {view === 'reconciliation' && (
               <BankReconciliationComponent
                 user={currentUser}
