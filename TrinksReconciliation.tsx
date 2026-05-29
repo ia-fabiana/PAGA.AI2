@@ -103,18 +103,19 @@ export const TrinksReconciliation: React.FC<Props> = ({ user, onBack, onShowRepo
       .sort((a, b) => a.date.localeCompare(b.date));
   };
 
-  // PagBank: colunas sep por ";", data col[5] "DD/MM/YYYY HH:MM", valor bruto col[11], status col[15]
+  // PagBank: col[6] = Data prevista de liberação (quando cai na conta), col[11] = Valor Bruto, col[15] = Status
   const parsePagBankCSV = (text: string): { date: string; amount: number }[] => {
     const lines = text.replace(/\r/g, '').replace(/^﻿/, '').split('\n');
     const totals: Record<string, number> = {};
     for (let i = 1; i < lines.length; i++) {
       const cols = lines[i].split(';');
       if (cols.length < 16) continue;
-      const dateTimeStr = cols[5].trim();
+      const releaseDateStr = cols[6].trim(); // Data prevista de liberação
       const status = cols[15].trim().toLowerCase();
       const amountStr = cols[11].trim();
       if (status !== 'aprovada') continue;
-      const datePart = dateTimeStr.split(' ')[0];
+      if (!releaseDateStr) continue;
+      const datePart = releaseDateStr.split(' ')[0];
       if (!/^\d{2}\/\d{2}\/\d{4}$/.test(datePart)) continue;
       const [dd, mm, yyyy] = datePart.split('/');
       const dateISO = `${yyyy}-${mm}-${dd}`;
