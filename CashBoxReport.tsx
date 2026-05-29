@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { db } from './firebase';
 import { collection, getDocs, query, orderBy, setDoc, doc, addDoc, updateDoc } from 'firebase/firestore';
 import { CashBoxData, PaymentMethod } from './types';
-import { FileDown, Plus, Edit2, ArrowLeft } from 'lucide-react';
+import { FileDown, Plus, Edit2, ArrowLeft, Eye, Printer } from 'lucide-react';
 import jsPDF from 'jspdf';
 import 'jspdf/dist/jspdf.umd.min.js';
 import autoTable from 'jspdf-autotable';
@@ -243,6 +243,102 @@ export const CashBoxReport: React.FC<CashBoxReportProps> = ({ onBack, canEdit = 
       grandTotal += value;
     });
   }
+
+  const openPrintPreview = (autoPrint = false) => {
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) return;
+
+    const headerCells = methods.map(m =>
+      `<th style="border:1px solid #ccc;padding:8px 10px;background:#1e293b;color:white;text-align:center;">${m.name}</th>`
+    ).join('');
+
+    let tableRowsHTML = '';
+    for (let day = 1; day <= daysInMonth; day++) {
+      const date = new Date(selectedYear, selectedMonth, day);
+      const entry = getEntryForDate(date);
+      const isWeekend = isWeekendOrHoliday(date);
+      const dayName = getDayOfWeek(date);
+      const rowBg = isWeekend ? 'background:#fef9c3;' : '';
+
+      const methodCells = methods.map(m => {
+        const value = getValueForMethod(entry, m);
+        return `<td style="border:1px solid #ccc;padding:5px 8px;text-align:right;${rowBg}">${value > 0 ? value.toLocaleString('pt-BR', { minimumFractionDigits: 2 }) : ''}</td>`;
+      }).join('');
+
+      const dayTotal = entry?.grandTotal || 0;
+      tableRowsHTML += `
+        <tr>
+          <td style="border:1px solid #ccc;padding:5px 8px;text-align:center;font-weight:bold;${isWeekend ? 'background:#fde68a;' : ''}">
+            ${dayName} ${String(day).padStart(2, '0')}/${String(selectedMonth + 1).padStart(2, '0')}
+          </td>
+          ${methodCells}
+          <td style="border:1px solid #ccc;padding:5px 8px;text-align:right;font-weight:bold;background:#fef08a;">
+            ${dayTotal > 0 ? dayTotal.toLocaleString('pt-BR', { minimumFractionDigits: 2 }) : ''}
+          </td>
+        </tr>`;
+    }
+
+    const totalCells = methods.map(m =>
+      `<td style="border:1px solid #ccc;padding:6px 8px;text-align:right;background:#1e293b;color:white;font-weight:bold;">
+        ${totalsByMethod[m.id].toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+      </td>`
+    ).join('');
+
+    printWindow.document.write(`
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <meta charset="UTF-8">
+          <title>Conferência de Caixas - ${monthName}</title>
+          <style>
+            body { font-family: Arial, sans-serif; padding: 24px; color: #1e293b; }
+            h1 { font-size: 17px; margin: 0 0 4px; font-weight: 900; letter-spacing: 0.5px; }
+            h2 { font-size: 12px; color: #64748b; margin: 0 0 18px; }
+            table { border-collapse: collapse; width: 100%; font-size: 11px; }
+            .actions { display: flex; gap: 10px; margin-top: 20px; justify-content: center; }
+            .btn { padding: 9px 24px; border: none; border-radius: 6px; font-size: 13px; font-weight: bold; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; }
+            .btn-print { background: #1e293b; color: white; }
+            .btn-close { background: #e2e8f0; color: #1e293b; }
+            p.footer { font-size: 10px; color: #94a3b8; margin-top: 14px; }
+            @media print {
+              .actions { display: none; }
+              body { padding: 10px; }
+            }
+          </style>
+        </head>
+        <body>
+          <h1>CONFERÊNCIA DE CAIXAS — VILA LEOPOLDINA</h1>
+          <h2>${monthName}</h2>
+          <table>
+            <thead>
+              <tr>
+                <th style="border:1px solid #ccc;padding:8px 10px;background:#1e293b;color:white;text-align:center;">DATA</th>
+                ${headerCells}
+                <th style="border:1px solid #ccc;padding:8px 10px;background:#ca8a04;color:white;text-align:center;">SOMA</th>
+              </tr>
+            </thead>
+            <tbody>${tableRowsHTML}</tbody>
+            <tfoot>
+              <tr>
+                <td style="border:1px solid #ccc;padding:6px 8px;text-align:center;background:#1e293b;color:white;font-weight:bold;">SOMA</td>
+                ${totalCells}
+                <td style="border:1px solid #ccc;padding:6px 8px;text-align:right;background:#ca8a04;color:white;font-weight:bold;">
+                  ${grandTotal.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                </td>
+              </tr>
+            </tfoot>
+          </table>
+          <p class="footer">Relatório gerado em ${new Date().toLocaleDateString('pt-BR')}</p>
+          <div class="actions">
+            <button class="btn btn-print" onclick="window.print()">🖨️ Imprimir</button>
+            <button class="btn btn-close" onclick="window.close()">✕ Fechar</button>
+          </div>
+          ${autoPrint ? '<script>window.onload=()=>window.print();<\/script>' : ''}
+        </body>
+      </html>
+    `);
+    printWindow.document.close();
+  };
 
   return (
     <div className="flex flex-col flex-1 bg-slate-50 p-6 overflow-y-auto">
@@ -494,13 +590,29 @@ export const CashBoxReport: React.FC<CashBoxReportProps> = ({ onBack, canEdit = 
               <div className="w-6 h-6 bg-yellow-100 border border-yellow-300 rounded"></div>
               <span className="text-sm text-slate-700">Domingo/Segunda (não trabalhados)</span>
             </div>
-            <button
-              onClick={generatePDF}
-              className="px-6 py-2 bg-red-600 text-white rounded-lg font-bold hover:bg-red-700 transition-colors flex items-center gap-2"
-              title="Baixar relatório em PDF"
-            >
-              <FileDown size={20} /> Baixar PDF
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => openPrintPreview(false)}
+                className="px-5 py-2 bg-slate-700 text-white rounded-lg font-bold hover:bg-slate-800 transition-colors flex items-center gap-2"
+                title="Visualizar relatório para impressão"
+              >
+                <Eye size={18} /> Visualizar
+              </button>
+              <button
+                onClick={() => openPrintPreview(true)}
+                className="px-5 py-2 bg-indigo-600 text-white rounded-lg font-bold hover:bg-indigo-700 transition-colors flex items-center gap-2"
+                title="Imprimir relatório"
+              >
+                <Printer size={18} /> Imprimir
+              </button>
+              <button
+                onClick={generatePDF}
+                className="px-5 py-2 bg-red-600 text-white rounded-lg font-bold hover:bg-red-700 transition-colors flex items-center gap-2"
+                title="Baixar relatório em PDF"
+              >
+                <FileDown size={18} /> Baixar PDF
+              </button>
+            </div>
           </div>
           <p className="text-xs text-slate-600 mt-3">
             Relatório gerado: {new Date().toLocaleDateString('pt-BR')}
