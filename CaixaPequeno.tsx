@@ -129,6 +129,7 @@ export const CaixaPequeno: React.FC<Props> = ({ bills, accounts, config, onSaveC
   const [expSaved, setExpSaved] = useState(false);
 
   const accountMap = useMemo(() => Object.fromEntries(accounts.map(a => [a.id, a.name])), [accounts]);
+  const sortedAccounts = useMemo(() => [...accounts].sort((a, b) => a.name.localeCompare(b.name, 'pt-BR')), [accounts]);
 
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editDesc, setEditDesc] = useState('');
@@ -444,7 +445,7 @@ export const CaixaPequeno: React.FC<Props> = ({ bills, accounts, config, onSaveC
               className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-amber-400 bg-white"
             >
               <option value="">— Selecionar —</option>
-              {accounts.map(a => (
+              {sortedAccounts.map(a => (
                 <option key={a.id} value={a.id}>{a.name}</option>
               ))}
             </select>
@@ -480,7 +481,7 @@ export const CaixaPequeno: React.FC<Props> = ({ bills, accounts, config, onSaveC
                   className="border border-slate-200 rounded-xl px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-amber-400 bg-white"
                 >
                   <option value="">— Nenhum —</option>
-                  {accounts.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+                  {sortedAccounts.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
                 </select>
               </div>
               <input
@@ -655,7 +656,7 @@ export const CaixaPequeno: React.FC<Props> = ({ bills, accounts, config, onSaveC
                         className="border border-slate-200 rounded-lg px-2 py-1 text-xs outline-none focus:ring-2 focus:ring-amber-400 bg-white"
                       >
                         <option value="">— Centro de custo —</option>
-                        {accounts.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+                        {sortedAccounts.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
                       </select>
                     </div>
                     <div className="flex gap-2">
