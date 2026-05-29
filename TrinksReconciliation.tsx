@@ -76,7 +76,7 @@ export const TrinksReconciliation: React.FC<Props> = ({ user, onBack, onShowRepo
   // Upload de extrato da operadora
   const [showUploadModal, setShowUploadModal] = useState(false);
   const [uploadProvider, setUploadProvider] = useState<Coluna>('rede');
-  const [uploadParsed, setUploadParsed] = useState<{ date: string; amount: number }[]>([]);
+  const [uploadParsed, setUploadParsed] = useState<{ date: string; amount: number; taxa?: number }[]>([]);
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState('');
   const [loadingBank, setLoadingBank] = useState(false);
@@ -103,16 +103,17 @@ export const TrinksReconciliation: React.FC<Props> = ({ user, onBack, onShowRepo
       .sort((a, b) => a.date.localeCompare(b.date));
   };
 
-  // PagBank: col[5] = Data da Transação (data da venda), col[11] = Valor Bruto, col[15] = Status
-  const parsePagBankCSV = (text: string): { date: string; amount: number }[] => {
+  // PagBank: col[5]=Data da Venda, col[11]=Valor Bruto, col[12]=Valor Taxa, col[15]=Status
+  const parsePagBankCSV = (text: string): { date: string; amount: number; taxa: number }[] => {
     const lines = text.replace(/\r/g, '').replace(/^﻿/, '').split('\n');
-    const totals: Record<string, number> = {};
+    const totals: Record<string, { amount: number; taxa: number }> = {};
     for (let i = 1; i < lines.length; i++) {
       const cols = lines[i].split(';');
       if (cols.length < 16) continue;
-      const saleDateStr = cols[5].trim(); // Data da Transação (data da venda)
+      const saleDateStr = cols[5].trim();
       const status = cols[15].trim().toLowerCase();
       const amountStr = cols[11].trim();
+      const taxaStr = cols[12].trim();
       if (status !== 'aprovada') continue;
       if (!saleDateStr) continue;
       const datePart = saleDateStr.split(' ')[0];
@@ -120,11 +121,14 @@ export const TrinksReconciliation: React.FC<Props> = ({ user, onBack, onShowRepo
       const [dd, mm, yyyy] = datePart.split('/');
       const dateISO = `${yyyy}-${mm}-${dd}`;
       const amount = parseFloat(amountStr.replace(/\./g, '').replace(',', '.')) || 0;
+      const taxa = parseFloat(taxaStr.replace(/\./g, '').replace(',', '.')) || 0;
       if (amount <= 0) continue;
-      totals[dateISO] = (totals[dateISO] || 0) + amount;
+      if (!totals[dateISO]) totals[dateISO] = { amount: 0, taxa: 0 };
+      totals[dateISO].amount += amount;
+      totals[dateISO].taxa += taxa;
     }
     return Object.entries(totals)
-      .map(([date, amount]) => ({ date, amount }))
+      .map(([date, v]) => ({ date, amount: v.amount, taxa: v.taxa }))
       .sort((a, b) => a.date.localeCompare(b.date));
   };
 
@@ -194,7 +198,9 @@ export const TrinksReconciliation: React.FC<Props> = ({ user, onBack, onShowRepo
   const handleConfirmUpload = async () => {
     setUploading(true);
     try {
-      for (const { date, amount } of uploadParsed) {
+      for (const row of uploadParsed) {
+        const { date, amount } = row;
+        const taxa = (row as any).taxa || 0;
         const existing = caixaByDate[date];
         const docId = existing?.id || `cashbox_${date}`;
         const din    = uploadProvider === 'din'    ? amount : (existing?.dinTotal    || 0);
@@ -203,14 +209,17 @@ export const TrinksReconciliation: React.FC<Props> = ({ user, onBack, onShowRepo
         const inter  = uploadProvider === 'inter'  ? amount : (existing?.interTotal  || 0);
         const frog   = uploadProvider === 'frog'   ? amount : (existing?.frogTotal   || 0);
         const grandTotal = din + rede + pagSeg + inter + frog;
-        await setDoc(doc(db, 'cashbox', docId), {
+        const saveData: any = {
           date, dinTotal: din, redeTotal: rede, pagSegTotal: pagSeg,
           interTotal: inter, frogTotal: frog, grandTotal, informedTotal: grandTotal,
           status: 'pending', observations: '',
           createdBy: user.email,
           createdAt: existing?.createdAt || new Date().toISOString(),
           isWeekendOrHoliday: false,
-        }, { merge: true });
+        };
+        if (uploadProvider === 'pagSeg' && taxa > 0) saveData.pagSegTaxa = taxa;
+        if (uploadProvider === 'rede' && taxa > 0) saveData.redeTaxa = taxa;
+        await setDoc(doc(db, 'cashbox', docId), saveData, { merge: true });
       }
       setShowUploadModal(false);
       setUploadParsed([]);
@@ -357,6 +366,8 @@ export const TrinksReconciliation: React.FC<Props> = ({ user, onBack, onShowRepo
   // Column totals
   const totTrinks: Record<string, number> = { din: 0, rede: 0, pagSeg: 0, inter: 0, frog: 0, total: 0 };
   const totCaixa: Record<string, number> = { din: 0, rede: 0, pagSeg: 0, inter: 0, frog: 0, total: 0 };
+  let totPagSegTaxa = 0;
+  let totRedeTaxa = 0;
   trinksDias.forEach(t => {
     COLUNAS.forEach(c => (totTrinks[c] += t[c]));
     totTrinks.total += t.total;
@@ -368,6 +379,8 @@ export const TrinksReconciliation: React.FC<Props> = ({ user, onBack, onShowRepo
     totCaixa.inter += c.interTotal ?? 0;
     totCaixa.frog += c.frogTotal ?? 0;
     totCaixa.total += c.grandTotal ?? 0;
+    totPagSegTaxa += (c as any).pagSegTaxa ?? 0;
+    totRedeTaxa += (c as any).redeTaxa ?? 0;
   });
 
   const nomesMes = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
@@ -584,11 +597,15 @@ export const TrinksReconciliation: React.FC<Props> = ({ user, onBack, onShowRepo
             const c = col === 'pagSeg' ? totCaixa.pagSeg : totCaixa[col];
             const diff = t - c;
             const hasDiff = Math.abs(diff) > 0.01;
+            const taxa = col === 'pagSeg' ? totPagSegTaxa : col === 'rede' ? totRedeTaxa : 0;
             return (
               <div key={col} className="bg-white rounded-xl border border-slate-200 p-4">
                 <p className="text-xs font-bold text-slate-500 mb-2">{COLUNA_LABELS[col]}</p>
                 <p className="text-sm font-bold text-indigo-700">T: R$ {fmt(t)}</p>
                 <p className="text-sm font-semibold text-slate-600">C: R$ {fmt(c)}</p>
+                {taxa > 0 && (
+                  <p className="text-xs font-semibold text-red-500 mt-1">Taxa: R$ {fmt(taxa)}</p>
+                )}
                 {hasDiff && (
                   <p className={`text-xs font-bold mt-1 ${diff > 0 ? 'text-red-500' : 'text-green-600'}`}>
                     {diff > 0 ? '+' : ''}{fmt(diff)}
@@ -921,7 +938,10 @@ export const TrinksReconciliation: React.FC<Props> = ({ user, onBack, onShowRepo
               {uploadParsed.length > 0 && (
                 <div className="mb-5">
                   <p className="text-xs font-bold text-slate-500 uppercase mb-2">
-                    {uploadParsed.length} dia(s) — total R$ {fmt(uploadParsed.reduce((s, r) => s + r.amount, 0))}
+                    {uploadParsed.length} dia(s) — bruto R$ {fmt(uploadParsed.reduce((s, r) => s + r.amount, 0))}
+                    {uploadParsed.some(r => (r as any).taxa > 0) && (
+                      <span className="text-red-500 ml-2">| taxa R$ {fmt(uploadParsed.reduce((s, r) => s + ((r as any).taxa || 0), 0))}</span>
+                    )}
                   </p>
                   <div className="max-h-44 overflow-y-auto border border-slate-100 rounded-xl divide-y divide-slate-50">
                     {uploadParsed.map(row => {
