@@ -150,6 +150,21 @@ export const BillList: React.FC<BillListProps> = ({
     setEndDate(draftEndDate);
   };
 
+  const MONTHS_SHORT = ['JAN','FEV','MAR','ABR','MAI','JUN','JUL','AGO','SET','OUT','NOV','DEZ'];
+  const selectMonth = (monthIndex: number) => {
+    const y = new Date().getFullYear();
+    const first = new Date(y, monthIndex, 1).toISOString().split('T')[0];
+    const last = new Date(y, monthIndex + 1, 0).toISOString().split('T')[0];
+    setDraftStartDate(first); setDraftEndDate(last);
+    setStartDate(first); setEndDate(last);
+  };
+  const isActiveMonth = (monthIndex: number) => {
+    const y = new Date().getFullYear();
+    const first = new Date(y, monthIndex, 1).toISOString().split('T')[0];
+    const last = new Date(y, monthIndex + 1, 0).toISOString().split('T')[0];
+    return startDate === first && endDate === last;
+  };
+
   const clearFilters = () => {
     setDraftSearchTerm('');
     setDraftStatusFilter('OPEN');
@@ -620,6 +635,27 @@ export const BillList: React.FC<BillListProps> = ({
               </option>
             ))}
           </select>
+        </div>
+
+        <div>
+          <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-1">
+            Mês Rápido
+          </label>
+          <div className="flex flex-wrap gap-1">
+            {MONTHS_SHORT.map((m, i) => (
+              <button
+                key={i}
+                type="button"
+                onClick={() => selectMonth(i)}
+                className="text-[10px] font-bold px-2 py-1 rounded-lg uppercase transition-all"
+                style={isActiveMonth(i)
+                  ? { backgroundColor: theme.colors.primary.purple, color: '#fff' }
+                  : { backgroundColor: theme.colors.primary.purpleLight, color: theme.colors.primary.purple }}
+              >
+                {m}
+              </button>
+            ))}
+          </div>
         </div>
 
         <div>

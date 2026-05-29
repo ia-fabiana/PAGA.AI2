@@ -156,6 +156,19 @@ export const Dashboard: React.FC<DashboardProps> = ({ bills, suppliers, accounts
 
   const applyFilter = () => { setStartDate(pendingStart); setEndDate(pendingEnd); };
 
+  const MONTHS_SHORT = ['JAN','FEV','MAR','ABR','MAI','JUN','JUL','AGO','SET','OUT','NOV','DEZ'];
+  const selectMonth = (monthIndex: number) => {
+    const first = new Date(currentYear, monthIndex, 1).toISOString().split('T')[0];
+    const last = new Date(currentYear, monthIndex + 1, 0).toISOString().split('T')[0];
+    setPendingStart(first); setPendingEnd(last);
+    setStartDate(first); setEndDate(last);
+  };
+  const isActiveMonth = (monthIndex: number) => {
+    const first = new Date(currentYear, monthIndex, 1).toISOString().split('T')[0];
+    const last = new Date(currentYear, monthIndex + 1, 0).toISOString().split('T')[0];
+    return startDate === first && endDate === last;
+  };
+
   const parseTrinksTime = (dataHora: string): string => {
     if (!dataHora) return '—';
     // ISO format: "2026-05-15T10:14:00" or "2026-05-15 10:14"
@@ -201,20 +214,37 @@ export const Dashboard: React.FC<DashboardProps> = ({ bills, suppliers, accounts
         </div>
         <div className="flex flex-wrap items-center gap-3">
           <TrinksUpload onComplete={() => loadTrinks()} />
-          <div className="bg-white p-3 rounded-[20px] border border-slate-100 shadow-[0_10px_15px_-3px_rgba(0,0,0,0.04)] flex flex-wrap items-center gap-3">
-            <div className="flex items-center gap-2">
-              <Filter size={16} className="text-slate-400" />
-              <span className="text-xs font-bold text-slate-400 uppercase">Período:</span>
+          <div className="bg-white p-3 rounded-[20px] border border-slate-100 shadow-[0_10px_15px_-3px_rgba(0,0,0,0.04)] flex flex-col gap-2">
+            <div className="flex flex-wrap items-center gap-3">
+              <div className="flex items-center gap-2">
+                <Filter size={16} className="text-slate-400" />
+                <span className="text-xs font-bold text-slate-400 uppercase">Período:</span>
+              </div>
+              <input type="date" className="bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs outline-none" value={pendingStart} onChange={e => setPendingStart(e.target.value)} />
+              <span className="text-slate-400 text-xs">até</span>
+              <input type="date" className="bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs outline-none" value={pendingEnd} onChange={e => setPendingEnd(e.target.value)} />
+              <button onClick={applyFilter} className="text-xs font-bold px-4 py-2 rounded-xl uppercase transition-all bg-indigo-600 text-white hover:bg-indigo-700">
+                Filtrar
+              </button>
+              <button onClick={resetToCurrentMonth} className="text-xs font-bold px-3 py-2 rounded-xl uppercase transition-all" style={{ backgroundColor: theme.colors.primary.purpleLight, color: theme.colors.primary.purple }}>
+                Este Mês
+              </button>
             </div>
-            <input type="date" className="bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs outline-none" value={pendingStart} onChange={e => setPendingStart(e.target.value)} />
-            <span className="text-slate-400 text-xs">até</span>
-            <input type="date" className="bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs outline-none" value={pendingEnd} onChange={e => setPendingEnd(e.target.value)} />
-            <button onClick={applyFilter} className="text-xs font-bold px-4 py-2 rounded-xl uppercase transition-all bg-indigo-600 text-white hover:bg-indigo-700">
-              Filtrar
-            </button>
-            <button onClick={resetToCurrentMonth} className="text-xs font-bold px-3 py-2 rounded-xl uppercase transition-all" style={{ backgroundColor: theme.colors.primary.purpleLight, color: theme.colors.primary.purple }}>
-              Este Mês
-            </button>
+            <div className="flex flex-wrap gap-1">
+              {MONTHS_SHORT.map((m, i) => (
+                <button
+                  key={i}
+                  type="button"
+                  onClick={() => selectMonth(i)}
+                  className="text-[10px] font-bold px-2 py-1 rounded-lg uppercase transition-all"
+                  style={isActiveMonth(i)
+                    ? { backgroundColor: theme.colors.primary.purple, color: '#fff' }
+                    : { backgroundColor: theme.colors.primary.purpleLight, color: theme.colors.primary.purple }}
+                >
+                  {m}
+                </button>
+              ))}
+            </div>
           </div>
         </div>
       </header>
