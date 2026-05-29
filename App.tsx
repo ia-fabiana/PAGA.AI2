@@ -29,6 +29,7 @@ const App: React.FC = () => {
   const [user, setUser] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [view, setView] = useState<'dashboard' | 'bills' | 'suppliers' | 'revenues' | 'team' | 'profile' | 'accounts' | 'dre' | 'cashbox' | 'cashbox-report' | 'cashbox-entry' | 'reconciliation' | 'caixa-pequeno'>('dashboard');
+  const [highlightBillId, setHighlightBillId] = useState<string | undefined>(undefined);
   
   const [bills, setBills] = useState<Bill[]>([]);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
@@ -2176,6 +2177,7 @@ const App: React.FC = () => {
                   setShowBillForm(true);
                 }}
                 onStatusChange={handleBillStatusChange}
+                onNavigateToBill={(id) => { setHighlightBillId(id); setView('bills'); }}
               />
             )}
             {view === 'bills' && (
@@ -2192,6 +2194,8 @@ const App: React.FC = () => {
             onStatusChange={handleBillStatusChange}
             onUpdate={handleBillInlineUpdate}
             onBulkUpdate={handleBulkBillUpdate}
+            highlightBillId={highlightBillId}
+            onClearHighlight={() => setHighlightBillId(undefined)}
             onDuplicate={handleDuplicateBill}
             onReopenReconciliation={handleReopenBillReconciliation}
             onToggleEstimate={handleToggleEstimate}

@@ -14,6 +14,7 @@ interface DashboardProps {
   accounts: ChartOfAccount[];
   onEditBill: (bill: Bill) => void;
   onStatusChange: (id: string, status: BillStatus) => void;
+  onNavigateToBill?: (id: string) => void;
 }
 
 const COLUNAS_CAIXA = ['din', 'rede', 'pagSeg', 'inter', 'frog'] as const;
@@ -27,7 +28,7 @@ const COLUNA_COLORS: Record<ColunaCaixa, string> = {
   frog:   '#EC4899',
 };
 
-export const Dashboard: React.FC<DashboardProps> = ({ bills, suppliers, accounts, onEditBill, onStatusChange }) => {
+export const Dashboard: React.FC<DashboardProps> = ({ bills, suppliers, accounts, onEditBill, onStatusChange, onNavigateToBill }) => {
   const now = new Date();
   const firstDay = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0];
   const lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().split('T')[0];
@@ -413,7 +414,11 @@ export const Dashboard: React.FC<DashboardProps> = ({ bills, suppliers, accounts
                 const account = accounts.find(a => a.id === bill.accountId);
                 const overdue = isOverdue(bill);
                 return (
-                  <div key={bill.id} className={`flex items-center justify-between p-3 rounded-xl border hover:shadow-sm transition-all ${overdue ? 'border-rose-200 bg-rose-50 hover:bg-rose-100' : 'border-slate-100 hover:bg-slate-50'}`}>
+                  <div
+                    key={bill.id}
+                    onClick={() => onNavigateToBill?.(bill.id)}
+                    className={`flex items-center justify-between p-3 rounded-xl border transition-all ${overdue ? 'border-rose-200 bg-rose-50 hover:bg-rose-100' : 'border-slate-100 hover:bg-slate-50'} ${onNavigateToBill ? 'cursor-pointer hover:shadow-md hover:-translate-y-0.5' : 'hover:shadow-sm'}`}
+                  >
                     <div className="flex-1 min-w-0 mr-2">
                       <div className="flex items-center gap-1.5 mb-0.5">
                         <p className="font-medium truncate text-sm" style={{ color: theme.colors.neutral.black }}>{bill.description}</p>

@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Bill, BillStatus, ChartOfAccount, Supplier, TeamMember, UserRole } from './types';
 import { AlertCircle, Copy, Edit2, FileDown, ListTree, Plus, Repeat, Search, Trash2, User } from 'lucide-react';
 import { jsPDF } from 'jspdf';
@@ -21,6 +21,8 @@ interface BillListProps {
   onOpenForm: () => void;
   onToggleEstimate: (id: string) => void;
   onBulkUpdate?: (ids: string[], changes: { supplierId?: string; accountId?: string }) => void;
+  highlightBillId?: string;
+  onClearHighlight?: () => void;
   userRole?: UserRole;
   canEditBills?: boolean;
   companyName?: string;
@@ -40,6 +42,8 @@ export const BillList: React.FC<BillListProps> = ({
   onOpenForm,
   onToggleEstimate,
   onBulkUpdate,
+  highlightBillId,
+  onClearHighlight,
   userRole,
   canEditBills,
   companyName = 'PAGA.AI',
@@ -64,6 +68,24 @@ export const BillList: React.FC<BillListProps> = ({
   const [bulkAction, setBulkAction] = useState<'supplier' | 'account' | null>(null);
   const [bulkValue, setBulkValue] = useState('');
   const isAdmin = userRole === UserRole.ADMIN;
+  const billRowRefs = useRef<Record<string, HTMLDivElement | null>>({});
+
+  useEffect(() => {
+    if (!highlightBillId) return;
+    setStatusFilter('ALL');
+    setDraftStatusFilter('ALL');
+    setStartDate('');
+    setEndDate('');
+    setDraftStartDate('');
+    setDraftEndDate('');
+    const timer = setTimeout(() => {
+      const el = billRowRefs.current[highlightBillId];
+      if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      const clearTimer = setTimeout(() => onClearHighlight?.(), 3000);
+      return () => clearTimeout(clearTimer);
+    }, 120);
+    return () => clearTimeout(timer);
+  }, [highlightBillId]);
   const teamMembersWithPhone = useMemo(
     () =>
       teamMembers.filter((member) => member.active !== false && Boolean(member.phone?.trim())),
@@ -786,8 +808,13 @@ export const BillList: React.FC<BillListProps> = ({
             const hasBoletoAttachment = Boolean(boletoAttachment?.url);
             const hasNfOrBoletoAttachment = hasInvoiceAttachment || hasBoletoAttachment;
 
+            const isHighlighted = highlightBillId === bill.id;
             return (
-              <div key={bill.id} className={`grid gap-4 px-4 py-4 lg:grid-cols-12 lg:items-start transition-colors ${selectedIds.has(bill.id) ? 'bg-violet-50' : ''}`}>
+              <div
+                key={bill.id}
+                ref={el => { billRowRefs.current[bill.id] = el; }}
+                className={`grid gap-4 px-4 py-4 lg:grid-cols-12 lg:items-start transition-all duration-500 ${selectedIds.has(bill.id) ? 'bg-violet-50' : ''} ${isHighlighted ? 'ring-2 ring-amber-400 ring-inset bg-amber-50' : ''}`}
+              >
                 <div className="space-y-3 lg:col-span-4">
                   <div className="flex items-start gap-3">
                     {isAdmin && (
