@@ -103,6 +103,30 @@ export const TrinksReconciliation: React.FC<Props> = ({ user, onBack, onShowRepo
       .sort((a, b) => a.date.localeCompare(b.date));
   };
 
+  // PagBank: colunas sep por ";", data col[5] "DD/MM/YYYY HH:MM", valor bruto col[11], status col[15]
+  const parsePagBankCSV = (text: string): { date: string; amount: number }[] => {
+    const lines = text.replace(/\r/g, '').replace(/^﻿/, '').split('\n');
+    const totals: Record<string, number> = {};
+    for (let i = 1; i < lines.length; i++) {
+      const cols = lines[i].split(';');
+      if (cols.length < 16) continue;
+      const dateTimeStr = cols[5].trim();
+      const status = cols[15].trim().toLowerCase();
+      const amountStr = cols[11].trim();
+      if (status !== 'aprovada') continue;
+      const datePart = dateTimeStr.split(' ')[0];
+      if (!/^\d{2}\/\d{2}\/\d{4}$/.test(datePart)) continue;
+      const [dd, mm, yyyy] = datePart.split('/');
+      const dateISO = `${yyyy}-${mm}-${dd}`;
+      const amount = parseFloat(amountStr.replace(/\./g, '').replace(',', '.')) || 0;
+      if (amount <= 0) continue;
+      totals[dateISO] = (totals[dateISO] || 0) + amount;
+    }
+    return Object.entries(totals)
+      .map(([date, amount]) => ({ date, amount }))
+      .sort((a, b) => a.date.localeCompare(b.date));
+  };
+
   const handleUploadFile = (file: File) => {
     setUploadError('');
     setUploadParsed([]);
@@ -110,12 +134,22 @@ export const TrinksReconciliation: React.FC<Props> = ({ user, onBack, onShowRepo
     reader.onload = e => {
       const text = (e.target?.result as string) || '';
       let parsed: { date: string; amount: number }[] = [];
-      // Por enquanto o parser da Rede serve de base; futuros parsers podem ser adicionados
-      parsed = parseRedeCSV(text);
-      if (parsed.length === 0) {
-        setUploadError('Nenhum lançamento aprovado encontrado. Verifique o arquivo.');
+      if (uploadProvider === 'pagSeg') {
+        parsed = parsePagBankCSV(text);
       } else {
-        setUploadParsed(parsed);
+        parsed = parseRedeCSV(text);
+      }
+      // filtra só o mês selecionado
+      const filtered = parsed.filter(r => r.date.startsWith(mesISO));
+      if (filtered.length === 0) {
+        const total = parsed.length;
+        setUploadError(
+          total > 0
+            ? `Arquivo lido (${total} dia(s) no total) mas nenhum lançamento em ${nomesMes[selectedMonth - 1]}/${selectedYear}. Verifique o mês selecionado.`
+            : 'Nenhum lançamento aprovado encontrado. Verifique o arquivo.'
+        );
+      } else {
+        setUploadParsed(filtered);
       }
     };
     reader.readAsText(file, 'UTF-8');
@@ -868,7 +902,7 @@ export const TrinksReconciliation: React.FC<Props> = ({ user, onBack, onShowRepo
                     <input
                       ref={uploadRef}
                       type="file"
-                      accept=".csv,text/csv"
+                      accept=".csv,.txt,text/csv,text/plain,application/vnd.ms-excel"
                       className="hidden"
                       onChange={e => { const f = e.target.files?.[0]; if (f) handleUploadFile(f); e.target.value = ''; }}
                     />
