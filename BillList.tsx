@@ -20,6 +20,7 @@ interface BillListProps {
   onReopenReconciliation: (bill: Bill) => Promise<void> | void;
   onOpenForm: () => void;
   onToggleEstimate: (id: string) => void;
+  onBulkUpdate?: (ids: string[], changes: { supplierId?: string; accountId?: string }) => void;
   userRole?: UserRole;
   canEditBills?: boolean;
   companyName?: string;
@@ -38,6 +39,7 @@ export const BillList: React.FC<BillListProps> = ({
   onReopenReconciliation,
   onOpenForm,
   onToggleEstimate,
+  onBulkUpdate,
   userRole,
   canEditBills,
   companyName = 'PAGA.AI',
@@ -58,6 +60,10 @@ export const BillList: React.FC<BillListProps> = ({
   const [paidAmountInputs, setPaidAmountInputs] = useState<Record<string, string>>({});
   const [paymentMethodByBillId, setPaymentMethodByBillId] = useState<Record<string, 'manual' | 'caixa_pequeno'>>({});
   const [whatsAppAssigneeByBillId, setWhatsAppAssigneeByBillId] = useState<Record<string, string>>({});
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [bulkAction, setBulkAction] = useState<'supplier' | 'account' | null>(null);
+  const [bulkValue, setBulkValue] = useState('');
+  const isAdmin = userRole === UserRole.ADMIN;
   const teamMembersWithPhone = useMemo(
     () =>
       teamMembers.filter((member) => member.active !== false && Boolean(member.phone?.trim())),
@@ -148,6 +154,28 @@ export const BillList: React.FC<BillListProps> = ({
     setSupplierFilter(draftSupplierFilter);
     setStartDate(draftStartDate);
     setEndDate(draftEndDate);
+  };
+
+  const toggleSelect = (id: string) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+  };
+  const toggleSelectAll = () => {
+    if (selectedIds.size === filteredBills.length) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(filteredBills.map(b => b.id)));
+    }
+  };
+  const clearSelection = () => { setSelectedIds(new Set()); setBulkAction(null); setBulkValue(''); };
+  const applyBulkUpdate = () => {
+    if (!bulkValue || !bulkAction || !onBulkUpdate) return;
+    const changes = bulkAction === 'supplier' ? { supplierId: bulkValue } : { accountId: bulkValue };
+    onBulkUpdate(Array.from(selectedIds), changes);
+    clearSelection();
   };
 
   const MONTHS_SHORT = ['JAN','FEV','MAR','ABR','MAI','JUN','JUL','AGO','SET','OUT','NOV','DEZ'];
@@ -717,6 +745,25 @@ export const BillList: React.FC<BillListProps> = ({
         </div>
       </div>
 
+      {isAdmin && filteredBills.length > 0 && (
+        <div className="flex items-center gap-3 px-1 py-1">
+          <label className="flex items-center gap-2 cursor-pointer select-none text-xs font-bold text-slate-500 uppercase">
+            <input
+              type="checkbox"
+              className="h-4 w-4 rounded accent-violet-600"
+              checked={selectedIds.size === filteredBills.length}
+              onChange={toggleSelectAll}
+            />
+            {selectedIds.size === filteredBills.length ? 'Desmarcar Todos' : 'Selecionar Todos'}
+          </label>
+          {selectedIds.size > 0 && (
+            <span className="text-xs font-bold" style={{ color: theme.colors.primary.purple }}>
+              {selectedIds.size} selecionada{selectedIds.size > 1 ? 's' : ''}
+            </span>
+          )}
+        </div>
+      )}
+
       <div className="overflow-hidden rounded-[20px] border border-slate-100 bg-white shadow-[0_10px_15px_-3px_rgba(0,0,0,0.04)]">
         <div className="divide-y divide-slate-100">
           {filteredBills.map((bill) => {
@@ -740,9 +787,17 @@ export const BillList: React.FC<BillListProps> = ({
             const hasNfOrBoletoAttachment = hasInvoiceAttachment || hasBoletoAttachment;
 
             return (
-              <div key={bill.id} className="grid gap-4 px-4 py-4 lg:grid-cols-12 lg:items-start">
+              <div key={bill.id} className={`grid gap-4 px-4 py-4 lg:grid-cols-12 lg:items-start transition-colors ${selectedIds.has(bill.id) ? 'bg-violet-50' : ''}`}>
                 <div className="space-y-3 lg:col-span-4">
                   <div className="flex items-start gap-3">
+                    {isAdmin && (
+                      <input
+                        type="checkbox"
+                        className="mt-1 h-4 w-4 shrink-0 rounded accent-violet-600 cursor-pointer"
+                        checked={selectedIds.has(bill.id)}
+                        onChange={() => toggleSelect(bill.id)}
+                      />
+                    )}
                     {bill.recurrenceType !== 'none' && (
                       <div className="mt-0.5 rounded-lg p-1.5" style={{ backgroundColor: '#EDE9FE', color: theme.colors.primary.purple }}>
                         <Repeat size={14} />
@@ -1047,6 +1102,75 @@ export const BillList: React.FC<BillListProps> = ({
           )}
         </div>
       </div>
+
+      {isAdmin && selectedIds.size > 0 && (
+        <div className="fixed bottom-6 left-1/2 z-50 -translate-x-1/2 flex items-center gap-3 rounded-2xl border border-violet-200 bg-white px-5 py-3 shadow-2xl">
+          <span className="text-sm font-black" style={{ color: theme.colors.primary.purple }}>
+            {selectedIds.size} conta{selectedIds.size > 1 ? 's' : ''} selecionada{selectedIds.size > 1 ? 's' : ''}
+          </span>
+
+          {bulkAction === null && (
+            <>
+              <button
+                type="button"
+                onClick={() => { setBulkAction('supplier'); setBulkValue(''); }}
+                className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-100 transition-colors"
+              >
+                Trocar Fornecedor
+              </button>
+              <button
+                type="button"
+                onClick={() => { setBulkAction('account'); setBulkValue(''); }}
+                className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-100 transition-colors"
+              >
+                Trocar Centro de Custo
+              </button>
+            </>
+          )}
+
+          {bulkAction !== null && (
+            <>
+              <select
+                className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs outline-none"
+                value={bulkValue}
+                onChange={e => setBulkValue(e.target.value)}
+              >
+                <option value="">
+                  {bulkAction === 'supplier' ? 'Escolher fornecedor...' : 'Escolher centro de custo...'}
+                </option>
+                {bulkAction === 'supplier'
+                  ? suppliers.map(s => <option key={s.id} value={s.id}>{s.name}</option>)
+                  : accounts.map(a => <option key={a.id} value={a.id}>{a.name}</option>)
+                }
+              </select>
+              <button
+                type="button"
+                disabled={!bulkValue}
+                onClick={applyBulkUpdate}
+                className="rounded-xl px-4 py-1.5 text-xs font-black text-white transition-colors disabled:opacity-40"
+                style={{ backgroundColor: theme.colors.primary.purple }}
+              >
+                Aplicar
+              </button>
+              <button
+                type="button"
+                onClick={() => { setBulkAction(null); setBulkValue(''); }}
+                className="rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-bold text-slate-500 hover:bg-slate-50 transition-colors"
+              >
+                Voltar
+              </button>
+            </>
+          )}
+
+          <button
+            type="button"
+            onClick={clearSelection}
+            className="rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-bold text-slate-400 hover:bg-slate-50 transition-colors"
+          >
+            Cancelar
+          </button>
+        </div>
+      )}
 
       {showPdfPreview && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-4">

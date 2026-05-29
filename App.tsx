@@ -1644,6 +1644,15 @@ const App: React.FC = () => {
     await saveBill(normalizedBill);
   };
 
+  const handleBulkBillUpdate = async (ids: string[], changes: { supplierId?: string; accountId?: string }) => {
+    setBills((prev) => prev.map((b) => ids.includes(b.id) ? { ...b, ...changes } : b));
+    if (isMockMode || !user) return;
+    const billsRef = getSharedBillsRef();
+    const batch = writeBatch(db);
+    ids.forEach((id) => batch.update(doc(billsRef, id), changes));
+    await batch.commit();
+  };
+
   const handleBulkBankTransactionBillReconcile = async (transactions: BankTransaction[], bill: Bill) => {
     const conflict = transactions.find((tx) =>
       bills.some((item) => item.id !== bill.id && getBillBankMatches(item).some((m) => m.transactionId === tx.id))
@@ -2182,6 +2191,7 @@ const App: React.FC = () => {
             onDelete={handleDeleteBill}
             onStatusChange={handleBillStatusChange}
             onUpdate={handleBillInlineUpdate}
+            onBulkUpdate={handleBulkBillUpdate}
             onDuplicate={handleDuplicateBill}
             onReopenReconciliation={handleReopenBillReconciliation}
             onToggleEstimate={handleToggleEstimate}
