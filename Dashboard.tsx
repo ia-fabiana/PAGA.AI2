@@ -90,7 +90,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ bills, suppliers, accounts
   const isOverdue = (bill: Bill) => !isPaid(bill) && toDate(bill.dueDate) < today;
   const paidBillsInPeriod = bills.filter(bill => isPaid(bill) && isDateWithinRange(getBillDisplayPaidDate(bill)));
 
-  const totalPending = filteredBills.filter(b => b.status === BillStatus.PENDING).reduce((sum, b) => sum + b.amount, 0);
+  const totalPending = filteredBills.filter(b => !isPaid(b) && !isOverdue(b)).reduce((sum, b) => sum + b.amount, 0);
   const totalPaid = paidBillsInPeriod.reduce((sum, bill) => sum + (getBillDisplayPaidAmount(bill) || 0), 0);
   const totalOverdue = filteredBills.filter(b => isOverdue(b)).reduce((sum, b) => sum + b.amount, 0);
 
@@ -398,7 +398,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ bills, suppliers, accounts
           <h3 className="text-lg font-semibold mb-4" style={{ color: theme.colors.neutral.black }}>Contas do Período</h3>
           <div className="space-y-4 max-h-[300px] overflow-y-auto pr-2">
             {(() => {
-              const periodNotPaid = filteredBills.filter(b => b.status !== BillStatus.PAID);
+              const periodNotPaid = filteredBills.filter(b => !isPaid(b));
               const periodIds = new Set(periodNotPaid.map(b => b.id));
               const overdueOutside = bills.filter(b => isOverdue(b) && !periodIds.has(b.id));
               const allContas = [...overdueOutside, ...periodNotPaid]

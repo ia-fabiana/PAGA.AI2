@@ -67,7 +67,7 @@ export const getBillPaymentSource = (bill: Bill) =>
 export const isBillFullyPaid = (bill: Bill) =>
   getBillBankMatches(bill).length > 0
     ? getBillBankPaidAmount(bill) >= bill.amount - PAYMENT_TOLERANCE
-    : bill.status === 'Pago' || Boolean(bill.paidDate);
+    : bill.paymentSource === 'caixa_pequeno' || bill.status === 'Pago' || Boolean(bill.paidDate);
 
 export const isBillPartiallyPaid = (bill: Bill) => {
   const bankPaidAmount = getBillBankPaidAmount(bill);
