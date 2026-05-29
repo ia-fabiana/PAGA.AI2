@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { db } from './firebase';
 import { collection, getDocs, query, where, orderBy, setDoc, doc } from 'firebase/firestore';
 import {
@@ -14,7 +14,7 @@ import {
 import { CashBoxData, TeamMember } from './types';
 import {
   RefreshCw, ChevronDown, ChevronUp, CheckCircle, AlertTriangle, XCircle,
-  Download, Edit2, Save, X, Eye,
+  Download, Edit2, Save, X, Eye, Upload,
 } from 'lucide-react';
 
 interface Props {
@@ -71,6 +71,85 @@ export const TrinksReconciliation: React.FC<Props> = ({ user, onBack, onShowRepo
   const [editingCaixaDate, setEditingCaixaDate] = useState<string | null>(null);
   const [editingCaixaValues, setEditingCaixaValues] = useState<Record<Coluna, string>>({ din: '', rede: '', pagSeg: '', inter: '', frog: '' });
   const [saving, setSaving] = useState(false);
+
+  // Upload de extrato da operadora
+  const [showUploadModal, setShowUploadModal] = useState(false);
+  const [uploadProvider, setUploadProvider] = useState<Coluna>('rede');
+  const [uploadParsed, setUploadParsed] = useState<{ date: string; amount: number }[]>([]);
+  const [uploading, setUploading] = useState(false);
+  const [uploadError, setUploadError] = useState('');
+  const uploadRef = useRef<HTMLInputElement>(null);
+
+  const parseRedeCSV = (text: string): { date: string; amount: number }[] => {
+    const lines = text.replace(/\r/g, '').split('\n');
+    const totals: Record<string, number> = {};
+    for (let i = 1; i < lines.length; i++) {
+      const cols = lines[i].split(';');
+      if (cols.length < 4) continue;
+      const dateStr = cols[0].trim();
+      const status = cols[2].trim().toLowerCase();
+      const amountStr = cols[3].trim();
+      if (status !== 'aprovada') continue;
+      if (!/^\d{2}\/\d{2}\/\d{4}$/.test(dateStr)) continue;
+      const [dd, mm, yyyy] = dateStr.split('/');
+      const dateISO = `${yyyy}-${mm}-${dd}`;
+      const amount = parseFloat(amountStr.replace(/\./g, '').replace(',', '.')) || 0;
+      totals[dateISO] = (totals[dateISO] || 0) + amount;
+    }
+    return Object.entries(totals)
+      .map(([date, amount]) => ({ date, amount }))
+      .sort((a, b) => a.date.localeCompare(b.date));
+  };
+
+  const handleUploadFile = (file: File) => {
+    setUploadError('');
+    setUploadParsed([]);
+    const reader = new FileReader();
+    reader.onload = e => {
+      const text = (e.target?.result as string) || '';
+      let parsed: { date: string; amount: number }[] = [];
+      // Por enquanto o parser da Rede serve de base; futuros parsers podem ser adicionados
+      parsed = parseRedeCSV(text);
+      if (parsed.length === 0) {
+        setUploadError('Nenhum lançamento aprovado encontrado. Verifique o arquivo.');
+      } else {
+        setUploadParsed(parsed);
+      }
+    };
+    reader.readAsText(file, 'UTF-8');
+  };
+
+  const handleConfirmUpload = async () => {
+    setUploading(true);
+    try {
+      for (const { date, amount } of uploadParsed) {
+        const existing = caixaByDate[date];
+        const docId = existing?.id || `cashbox_${date}`;
+        const din    = uploadProvider === 'din'    ? amount : (existing?.dinTotal    || 0);
+        const rede   = uploadProvider === 'rede'   ? amount : (existing?.redeTotal   || 0);
+        const pagSeg = uploadProvider === 'pagSeg' ? amount : (existing?.pagSegTotal || 0);
+        const inter  = uploadProvider === 'inter'  ? amount : (existing?.interTotal  || 0);
+        const frog   = uploadProvider === 'frog'   ? amount : (existing?.frogTotal   || 0);
+        const grandTotal = din + rede + pagSeg + inter + frog;
+        await setDoc(doc(db, 'cashbox', docId), {
+          date, dinTotal: din, redeTotal: rede, pagSegTotal: pagSeg,
+          interTotal: inter, frogTotal: frog, grandTotal, informedTotal: grandTotal,
+          status: 'pending', observations: '',
+          createdBy: user.email,
+          createdAt: existing?.createdAt || new Date().toISOString(),
+          isWeekendOrHoliday: false,
+        }, { merge: true });
+      }
+      setShowUploadModal(false);
+      setUploadParsed([]);
+      await carregarDados();
+    } catch (e) {
+      setUploadError('Erro ao importar. Tente novamente.');
+      console.error(e);
+    } finally {
+      setUploading(false);
+    }
+  };
 
   const mesISO = `${selectedYear}-${String(selectedMonth).padStart(2, '0')}`;
   const dataInicio = `${mesISO}-01`;
@@ -371,6 +450,12 @@ export const TrinksReconciliation: React.FC<Props> = ({ user, onBack, onShowRepo
                   <option key={y} value={y}>{y}</option>,
                 )}
               </select>
+              <button
+                onClick={() => { setShowUploadModal(true); setUploadParsed([]); setUploadError(''); }}
+                className="flex items-center gap-2 px-3 py-2 bg-emerald-100 text-emerald-700 rounded-lg text-sm font-semibold hover:bg-emerald-200"
+              >
+                <Upload size={16} /> Upload Extrato
+              </button>
               <button
                 onClick={() => openPrintPreview(false)}
                 className="flex items-center gap-2 px-3 py-2 bg-slate-100 text-slate-700 rounded-lg text-sm font-semibold hover:bg-slate-200"
@@ -701,6 +786,84 @@ export const TrinksReconciliation: React.FC<Props> = ({ user, onBack, onShowRepo
                   </tr>
                 </tfoot>
               </table>
+            </div>
+          </div>
+        )}
+
+        {/* Modal upload extrato */}
+        {showUploadModal && (
+          <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-2xl shadow-2xl max-w-lg w-full p-6">
+              <h2 className="text-lg font-black text-slate-800 mb-1">Upload Extrato da Operadora</h2>
+              <p className="text-xs text-slate-400 mb-5">Importe o relatório de vendas e os valores serão preenchidos automaticamente por dia.</p>
+
+              <div className="mb-4">
+                <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Operadora</label>
+                <select
+                  value={uploadProvider}
+                  onChange={e => { setUploadProvider(e.target.value as Coluna); setUploadParsed([]); setUploadError(''); }}
+                  className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400"
+                >
+                  <option value="rede">REDE</option>
+                  <option value="pagSeg">PAG SEG</option>
+                  <option value="inter">INTER</option>
+                  <option value="frog">FROG</option>
+                  <option value="din">DIN</option>
+                </select>
+              </div>
+
+              <div className="mb-4">
+                <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Arquivo CSV</label>
+                <input
+                  ref={uploadRef}
+                  type="file"
+                  accept=".csv,text/csv"
+                  className="hidden"
+                  onChange={e => { const f = e.target.files?.[0]; if (f) handleUploadFile(f); e.target.value = ''; }}
+                />
+                <button
+                  onClick={() => uploadRef.current?.click()}
+                  className="flex items-center gap-2 px-4 py-3 border-2 border-dashed border-slate-300 rounded-xl text-sm text-slate-500 hover:border-indigo-400 hover:text-indigo-600 transition-colors w-full justify-center"
+                >
+                  <Upload size={16} /> Selecionar arquivo CSV
+                </button>
+                {uploadError && <p className="text-xs text-red-500 font-medium mt-2">{uploadError}</p>}
+              </div>
+
+              {uploadParsed.length > 0 && (
+                <div className="mb-5">
+                  <p className="text-xs font-bold text-slate-500 uppercase mb-2">
+                    {uploadParsed.length} dia(s) — total R$ {fmt(uploadParsed.reduce((s, r) => s + r.amount, 0))}
+                  </p>
+                  <div className="max-h-44 overflow-y-auto border border-slate-100 rounded-xl divide-y divide-slate-50">
+                    {uploadParsed.map(row => {
+                      const [yyyy, mm, dd] = row.date.split('-');
+                      return (
+                        <div key={row.date} className="flex justify-between px-3 py-2 text-xs">
+                          <span className="font-semibold text-slate-600">{dd}/{mm}/{yyyy}</span>
+                          <span className="font-bold text-indigo-700">R$ {fmt(row.amount)}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              <div className="flex gap-3 justify-end">
+                <button
+                  onClick={() => { setShowUploadModal(false); setUploadParsed([]); }}
+                  className="px-4 py-2 border border-slate-200 rounded-lg text-sm text-slate-600 hover:bg-slate-50"
+                >
+                  Cancelar
+                </button>
+                <button
+                  onClick={handleConfirmUpload}
+                  disabled={uploadParsed.length === 0 || uploading}
+                  className="px-5 py-2 bg-indigo-600 text-white rounded-lg text-sm font-bold hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {uploading ? 'Importando...' : `Importar ${uploadParsed.length} dia(s)`}
+                </button>
+              </div>
             </div>
           </div>
         )}
