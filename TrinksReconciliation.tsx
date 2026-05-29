@@ -348,12 +348,12 @@ export const TrinksReconciliation: React.FC<Props> = ({ user, onBack, onShowCash
                           {COLUNA_LABELS[col]}<br /><span className="text-slate-400 font-normal">Trinks</span>
                         </th>
                         <th className="px-2 py-3 text-right font-bold text-slate-600 min-w-[80px]">
-                          {COLUNA_LABELS[col]}<br /><span className="text-slate-400 font-normal">Caixa</span>
+                          {COLUNA_LABELS[col]}<br /><span className="text-slate-400 font-normal">Receitas</span>
                         </th>
                       </React.Fragment>
                     ))}
                     <th className="px-2 py-3 text-right font-bold text-indigo-700 min-w-[90px]">Total Trinks</th>
-                    <th className="px-2 py-3 text-right font-bold text-slate-700 min-w-[90px]">Total Caixa</th>
+                    <th className="px-2 py-3 text-right font-bold text-slate-700 min-w-[90px]">Total Receitas</th>
                     <th className="px-2 py-3 text-right font-bold text-slate-600 min-w-[80px]">Diferença</th>
                     <th className="px-2 py-3 text-center w-12"></th>
                   </tr>
@@ -438,7 +438,7 @@ export const TrinksReconciliation: React.FC<Props> = ({ user, onBack, onShowCash
                             <td colSpan={COLUNAS.length * 2 + 4} className="px-4 py-4">
                               <div className="flex flex-wrap items-end gap-4">
                                 <span className="text-xs font-black text-indigo-700 self-center whitespace-nowrap">
-                                  Caixa {dd}/{String(selectedMonth).padStart(2, '0')}
+                                  Receitas {dd}/{String(selectedMonth).padStart(2, '0')}
                                 </span>
                                 {COLUNAS.map(col => (
                                   <div key={col} className="flex flex-col gap-1">
@@ -596,7 +596,7 @@ export const TrinksReconciliation: React.FC<Props> = ({ user, onBack, onShowCash
           <span className="flex items-center gap-1"><CheckCircle size={12} className="text-green-500" /> Coincide (&lt;1%)</span>
           <span className="flex items-center gap-1"><AlertTriangle size={12} className="text-yellow-500" /> Pequena diferença (1-5%)</span>
           <span className="flex items-center gap-1"><XCircle size={12} className="text-red-500" /> Diferença significativa (&gt;5%)</span>
-          <span className="ml-auto text-slate-400">T = Trinks · C = Caixa manual</span>
+          <span className="ml-auto text-slate-400">T = Trinks · C = Receitas manual</span>
         </div>
       </div>
     </div>

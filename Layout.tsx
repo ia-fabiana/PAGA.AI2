@@ -58,7 +58,7 @@ export const Layout: React.FC<LayoutProps> = ({ children, currentView, setView, 
   const navItems = [
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, permission: 'dashboard' },
     { id: 'dre', label: 'DRE Gerencial', icon: FilePieChart, permission: 'dre' },
-    { id: 'cashbox', label: 'Caixa', icon: DollarSign, permission: 'cashbox' },
+    { id: 'cashbox', label: 'Receitas', icon: DollarSign, permission: 'cashbox' },
     { id: 'caixa-pequeno', label: 'Dinheiro', icon: Wallet, permission: 'cashbox' },
     { id: 'reconciliation', label: 'Extrato Bancário', icon: Landmark, permission: 'reconciliation' },
     { id: 'bills', label: 'Contas a Pagar', icon: Receipt, permission: 'bills' },

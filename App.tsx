@@ -2130,9 +2130,9 @@ const App: React.FC = () => {
     profile: 'Empresa',
     accounts: 'Centro de Custo',
     dre: 'DRE',
-    cashbox: 'Caixa',
-    'cashbox-report': 'Relatorio de Caixa',
-    'cashbox-entry': 'Lancamentos Caixa',
+    cashbox: 'Receitas',
+    'cashbox-report': 'Relatorio de Receitas',
+    'cashbox-entry': 'Lancamentos Receitas',
     reconciliation: 'Extrato Bancario',
     'caixa-pequeno': 'Dinheiro',
   };

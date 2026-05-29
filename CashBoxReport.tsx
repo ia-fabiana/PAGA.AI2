@@ -165,7 +165,7 @@ export const CashBoxReport: React.FC<CashBoxReportProps> = ({ onBack, canEdit = 
 
     // Title
     pdfDoc.setFontSize(14);
-    pdfDoc.text(`CONFERÊNCIA DE CAIXAS - VILA LEOPOLDINA`, 14, 15);
+    pdfDoc.text(`CONFERÊNCIA DE RECEITAS - VILA LEOPOLDINA`, 14, 15);
     pdfDoc.setFontSize(10);
     pdfDoc.text(`${monthName}`, 14, 22);
 
@@ -221,7 +221,7 @@ export const CashBoxReport: React.FC<CashBoxReportProps> = ({ onBack, canEdit = 
     });
 
     // Save
-    pdfDoc.save(`Caixa_${monthName.replace(/\s+/g, '_')}.pdf`);
+    pdfDoc.save(`Receitas_${monthName.replace(/\s+/g, '_')}.pdf`);
   };
 
   const daysInMonth = getDaysInMonth(selectedYear, selectedMonth);
@@ -289,7 +289,7 @@ export const CashBoxReport: React.FC<CashBoxReportProps> = ({ onBack, canEdit = 
       <html>
         <head>
           <meta charset="UTF-8">
-          <title>Conferência de Caixas - ${monthName}</title>
+          <title>Conferência de Receitas - ${monthName}</title>
           <style>
             body { font-family: Arial, sans-serif; padding: 24px; color: #1e293b; }
             h1 { font-size: 17px; margin: 0 0 4px; font-weight: 900; letter-spacing: 0.5px; }
@@ -307,7 +307,7 @@ export const CashBoxReport: React.FC<CashBoxReportProps> = ({ onBack, canEdit = 
           </style>
         </head>
         <body>
-          <h1>CONFERÊNCIA DE CAIXAS — VILA LEOPOLDINA</h1>
+          <h1>CONFERÊNCIA DE RECEITAS — VILA LEOPOLDINA</h1>
           <h2>${monthName}</h2>
           <table>
             <thead>
@@ -356,7 +356,7 @@ export const CashBoxReport: React.FC<CashBoxReportProps> = ({ onBack, canEdit = 
                   <ArrowLeft size={24} className="text-slate-600" />
                 </button>
                 <div>
-                  <h1 className="text-3xl font-black text-slate-800">CONFERÊNCIA DE CAIXAS</h1>
+                  <h1 className="text-3xl font-black text-slate-800">CONFERÊNCIA DE RECEITAS</h1>
                   <p className="text-sm text-slate-500 mt-1">Vila Leopoldina</p>
                 </div>
               </div>

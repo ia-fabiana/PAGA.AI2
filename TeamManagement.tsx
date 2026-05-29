@@ -81,7 +81,7 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({ team, setTeam, c
 
   const roleOptions = [
     { id: UserRole.ADMIN,  label: 'Administrador', description: 'Acesso total. Todos os módulos liberados automaticamente.' },
-    { id: UserRole.EDITOR, label: 'Editor',         description: 'Padrão: Contas, Fornecedores, DRE e Caixa. Personalize os tiles abaixo.' },
+    { id: UserRole.EDITOR, label: 'Editor',         description: 'Padrão: Contas, Fornecedores, DRE e Receitas. Personalize os tiles abaixo.' },
     { id: UserRole.VIEWER, label: 'Visualizador',   description: 'Padrão: somente Contas (leitura). Personalize os tiles abaixo.' },
   ];
 
@@ -250,15 +250,15 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({ team, setTeam, c
     { id: 'suppliers', label: 'Fornecedores', icon: Users, color: 'emerald' },
     { id: 'accounts', label: 'Centro Custo', icon: ListTree, color: 'purple' },
     { id: 'dre', label: 'DRE', icon: FilePieChart, color: 'pink' },
-    { id: 'cashbox', label: 'Caixa', icon: DollarSign, color: 'green' },
+    { id: 'cashbox', label: 'Receitas', icon: DollarSign, color: 'green' },
     { id: 'reconciliation', label: 'Conciliação Bancária', icon: Landmark, color: 'teal' },
     { id: 'bills_reconciliation', label: 'Conciliação Despesas', icon: CreditCard, color: 'cyan' },
     { id: 'team', label: 'Equipe', icon: UserCog, color: 'orange' },
     { id: 'profile', label: 'Empresa', icon: Building2, color: 'slate' },
     { id: 'canEditBillDate', label: 'Editar Data Lançamento', icon: Calendar, color: 'cyan' },
     { id: 'canCreateSupplier', label: 'Cadastrar Fornecedor', icon: Users, color: 'lime' },
-    { id: 'canEditCashBoxStatus', label: 'Editar Status do Caixa', icon: ShieldCheck, color: 'violet' },
-    { id: 'canLaunchCaixa', label: 'Lançar Caixa', icon: Edit2, color: 'teal' },
+    { id: 'canEditCashBoxStatus', label: 'Editar Status das Receitas', icon: ShieldCheck, color: 'violet' },
+    { id: 'canLaunchCaixa', label: 'Lançar Receitas', icon: Edit2, color: 'teal' },
   ];
 
   const getModuleLevel = (value: any): 'none' | 'viewer' | 'editor' => {

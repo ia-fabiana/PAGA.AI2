@@ -245,7 +245,7 @@ export const CashBox: React.FC<CashBoxProps> = ({ user, onShowReport, onShowTrin
       <!DOCTYPE html><html>
       <head>
         <meta charset="UTF-8">
-        <title>Caixa — ${periodLabel}</title>
+        <title>Receitas — ${periodLabel}</title>
         <style>
           body { font-family: Arial, sans-serif; padding: 20px; color: #1e293b; }
           h1 { font-size: 16px; margin: 0 0 4px; font-weight: 900; }
@@ -260,7 +260,7 @@ export const CashBox: React.FC<CashBoxProps> = ({ user, onShowReport, onShowTrin
         </style>
       </head>
       <body>
-        <h1>CAIXA — LANÇAMENTOS</h1>
+        <h1>RECEITAS — LANÇAMENTOS</h1>
         <h2>${periodLabel}</h2>
         <table>
           <thead>
@@ -268,7 +268,7 @@ export const CashBox: React.FC<CashBoxProps> = ({ user, onShowReport, onShowTrin
               <th style="border:1px solid #ccc;padding:7px 10px;background:#1e293b;color:white;text-align:left;">Data</th>
               ${headerCells}
               <th style="border:1px solid #ccc;padding:7px 10px;background:#1e293b;color:white;text-align:right;">Soma</th>
-              <th style="border:1px solid #ccc;padding:7px 10px;background:#1d4ed8;color:white;text-align:right;">Total Caixa</th>
+              <th style="border:1px solid #ccc;padding:7px 10px;background:#1d4ed8;color:white;text-align:right;">Total Receitas</th>
               <th style="border:1px solid #ccc;padding:7px 10px;background:#1e293b;color:white;text-align:right;">Diferença</th>
               <th style="border:1px solid #ccc;padding:7px 10px;background:#1e293b;color:white;text-align:center;">Status</th>
             </tr>
@@ -292,7 +292,7 @@ export const CashBox: React.FC<CashBoxProps> = ({ user, onShowReport, onShowTrin
         <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6">
           <div className="flex justify-between items-center">
             <div>
-              <h1 className="text-3xl font-black text-slate-800">CAIXA</h1>
+              <h1 className="text-3xl font-black text-slate-800">RECEITAS</h1>
               <p className="text-sm text-slate-500 mt-1">Controle de movimentação diária de caixa</p>
               <p className="text-sm font-bold text-indigo-600 mt-2">
                 PERÍODO: {new Date(selectedYear, selectedMonth - 1, 1).toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' }).toUpperCase()}
@@ -344,9 +344,9 @@ export const CashBox: React.FC<CashBoxProps> = ({ user, onShowReport, onShowTrin
                 <button
                   onClick={onShowTrinksReconciliation}
                   className="flex items-center gap-2 px-3 py-2 bg-slate-100 text-slate-700 rounded-lg hover:bg-slate-200 transition-colors text-sm font-semibold"
-                  title="Voltar para Caixa"
+                  title="Voltar para Receitas"
                 >
-                  ← Caixa
+                  ← Receitas
                 </button>
               )}
               {user.role === 'ADMIN' && (
@@ -418,7 +418,7 @@ export const CashBox: React.FC<CashBoxProps> = ({ user, onShowReport, onShowTrin
                     <th key={method.id} className="px-6 py-4 text-center text-sm font-bold">{method.name}</th>
                   ))}
                   <th className="px-6 py-4 text-center text-sm font-bold">SOMA</th>
-                  <th className="px-6 py-4 text-center text-sm font-bold">TOTAL CAIXA</th>
+                  <th className="px-6 py-4 text-center text-sm font-bold">TOTAL RECEITAS</th>
                   <th className="px-6 py-4 text-center text-sm font-bold">DIFERENÇA</th>
                   <th className="px-6 py-4 text-center text-sm font-bold">Status</th>
                   <th className="px-6 py-4 text-center text-sm font-bold">Ações</th>
@@ -552,7 +552,7 @@ export const CashBox: React.FC<CashBoxProps> = ({ user, onShowReport, onShowTrin
           <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
             <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
               <div className="p-6 border-b border-slate-200 flex justify-between items-center sticky top-0 bg-white">
-                <h2 className="text-2xl font-bold text-slate-800">Editar Caixa - {formatDate(editingEntry.date)}</h2>
+                <h2 className="text-2xl font-bold text-slate-800">Editar Receitas - {formatDate(editingEntry.date)}</h2>
                 <button onClick={() => setEditingEntry(null)} className="text-slate-400 hover:text-slate-600">
                   <X size={24} />
                 </button>
@@ -592,7 +592,7 @@ export const CashBox: React.FC<CashBoxProps> = ({ user, onShowReport, onShowTrin
 
                 {/* Valor Total do Caixa */}
                 <div>
-                  <label className="block text-sm font-bold text-slate-700 mb-2">VALOR TOTAL DO CAIXA</label>
+                  <label className="block text-sm font-bold text-slate-700 mb-2">VALOR TOTAL DE RECEITAS</label>
                   <input
                     type="number"
                     step="0.01"
@@ -629,7 +629,7 @@ export const CashBox: React.FC<CashBoxProps> = ({ user, onShowReport, onShowTrin
                     </p>
                     <p className="text-xs mt-1 text-slate-600">
                       {(editingEntry.informedTotal - editingEntry.grandTotal) === 0 
-                        ? '✓ Caixa confere!' 
+                        ? '✓ Receitas conferem!' 
                         : (editingEntry.informedTotal - editingEntry.grandTotal) > 0
                         ? '↑ Sobra de caixa'
                         : '↓ Falta no caixa'}
