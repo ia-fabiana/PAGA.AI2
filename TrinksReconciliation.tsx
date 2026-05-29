@@ -14,7 +14,7 @@ import {
 import { CashBoxData, TeamMember } from './types';
 import {
   RefreshCw, ChevronDown, ChevronUp, CheckCircle, AlertTriangle, XCircle,
-  Download, Edit2, Save, X,
+  Download, Edit2, Save, X, Eye, Printer,
 } from 'lucide-react';
 
 interface Props {
@@ -237,6 +237,110 @@ export const TrinksReconciliation: React.FC<Props> = ({ user, onBack, onShowCash
     : consumoPct >= 50 ? 'bg-amber-100 text-amber-700'
     : 'bg-emerald-100 text-emerald-700';
 
+  const openPrintPreview = (autoPrint = false) => {
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) return;
+
+    const periodLabel = `${nomesMes[selectedMonth - 1]} ${selectedYear}`;
+
+    const headerCells = COLUNAS.map(col => `
+      <th style="border:1px solid #ccc;padding:6px 8px;background:#4338ca;color:white;text-align:right;font-size:10px;">
+        ${COLUNA_LABELS[col]}<br><span style="font-weight:400;opacity:.8;">Trinks</span>
+      </th>
+      <th style="border:1px solid #ccc;padding:6px 8px;background:#1e293b;color:white;text-align:right;font-size:10px;">
+        ${COLUNA_LABELS[col]}<br><span style="font-weight:400;opacity:.8;">Receitas</span>
+      </th>`).join('');
+
+    const rowsHTML = allDates.map(date => {
+      const tr = trinksByDate[date];
+      const cx = caixaByDate[date];
+      if (!tr && !cx) return '';
+      const [, , dd] = date.split('-');
+      const totalTrinks = tr?.total ?? 0;
+      const totalCaixa = cx?.grandTotal ?? 0;
+      const diff = totalTrinks - totalCaixa;
+      const diffColor = Math.abs(diff) < 0.01 ? '#15803d' : diff > 0 ? '#dc2626' : '#d97706';
+
+      const colCells = COLUNAS.map(col => {
+        const tv = tr?.[col] ?? 0;
+        const cv = cx ? (col === 'din' ? cx.dinTotal : col === 'rede' ? cx.redeTotal : col === 'pagSeg' ? cx.pagSegTotal : col === 'inter' ? cx.interTotal : cx.frogTotal) ?? 0 : 0;
+        return `
+          <td style="border:1px solid #e5e7eb;padding:5px 7px;text-align:right;color:#4338ca;">${tv > 0 ? fmt(tv) : ''}</td>
+          <td style="border:1px solid #e5e7eb;padding:5px 7px;text-align:right;color:#374151;">${cv > 0 ? fmt(cv) : ''}</td>`;
+      }).join('');
+
+      return `<tr>
+        <td style="border:1px solid #e5e7eb;padding:5px 7px;font-weight:600;">${dd}/${String(selectedMonth).padStart(2, '0')}</td>
+        ${colCells}
+        <td style="border:1px solid #e5e7eb;padding:5px 7px;text-align:right;font-weight:bold;color:#4338ca;">${fmt(totalTrinks)}</td>
+        <td style="border:1px solid #e5e7eb;padding:5px 7px;text-align:right;font-weight:bold;">${cx ? fmt(totalCaixa) : ''}</td>
+        <td style="border:1px solid #e5e7eb;padding:5px 7px;text-align:right;font-weight:bold;color:${diffColor};">${Math.abs(diff) < 0.01 ? '✓' : `${diff > 0 ? '+' : ''}${fmt(diff)}`}</td>
+      </tr>`;
+    }).join('');
+
+    const totColCells = COLUNAS.map(col => {
+      const t = totTrinks[col];
+      const c = col === 'pagSeg' ? totCaixa.pagSeg : totCaixa[col];
+      return `
+        <td style="border:1px solid #ccc;padding:6px 8px;text-align:right;background:#4338ca;color:white;font-weight:bold;">${fmt(t)}</td>
+        <td style="border:1px solid #ccc;padding:6px 8px;text-align:right;background:#1e293b;color:white;font-weight:bold;">${fmt(c)}</td>`;
+    }).join('');
+
+    printWindow.document.write(`
+      <!DOCTYPE html><html>
+      <head>
+        <meta charset="UTF-8">
+        <title>Receitas — ${periodLabel}</title>
+        <style>
+          body { font-family: Arial, sans-serif; padding: 20px; color: #1e293b; font-size: 11px; }
+          h1 { font-size: 15px; margin: 0 0 3px; font-weight: 900; }
+          h2 { font-size: 11px; color: #64748b; margin: 0 0 14px; }
+          table { border-collapse: collapse; width: 100%; }
+          .actions { display: flex; gap: 10px; margin-top: 16px; justify-content: center; }
+          .btn { padding: 8px 22px; border: none; border-radius: 6px; font-size: 13px; font-weight: bold; cursor: pointer; }
+          .btn-print { background: #1e293b; color: white; }
+          .btn-close { background: #e2e8f0; color: #1e293b; }
+          p.footer { font-size: 10px; color: #94a3b8; margin-top: 10px; }
+          @media print { .actions { display: none; } }
+        </style>
+      </head>
+      <body>
+        <h1>RECEITAS — CONCILIAÇÃO TRINKS vs LANÇAMENTOS</h1>
+        <h2>${periodLabel}</h2>
+        <table>
+          <thead>
+            <tr>
+              <th style="border:1px solid #ccc;padding:6px 8px;background:#1e293b;color:white;text-align:left;">Data</th>
+              ${headerCells}
+              <th style="border:1px solid #ccc;padding:6px 8px;background:#4338ca;color:white;text-align:right;">Total Trinks</th>
+              <th style="border:1px solid #ccc;padding:6px 8px;background:#1e293b;color:white;text-align:right;">Total Receitas</th>
+              <th style="border:1px solid #ccc;padding:6px 8px;background:#1e293b;color:white;text-align:right;">Diferença</th>
+            </tr>
+          </thead>
+          <tbody>${rowsHTML}</tbody>
+          <tfoot>
+            <tr>
+              <td style="border:1px solid #ccc;padding:6px 8px;background:#1e293b;color:white;font-weight:bold;">TOTAL</td>
+              ${totColCells}
+              <td style="border:1px solid #ccc;padding:6px 8px;text-align:right;background:#4338ca;color:white;font-weight:bold;">${fmt(totTrinks.total)}</td>
+              <td style="border:1px solid #ccc;padding:6px 8px;text-align:right;background:#1e293b;color:white;font-weight:bold;">${fmt(totCaixa.total)}</td>
+              <td style="border:1px solid #ccc;padding:6px 8px;text-align:right;background:${Math.abs(totTrinks.total - totCaixa.total) < 0.01 ? '#15803d' : '#dc2626'};color:white;font-weight:bold;">
+                ${Math.abs(totTrinks.total - totCaixa.total) < 0.01 ? '✓ OK' : `${totTrinks.total > totCaixa.total ? '+' : ''}${fmt(totTrinks.total - totCaixa.total)}`}
+              </td>
+            </tr>
+          </tfoot>
+        </table>
+        <p class="footer">Relatório gerado em ${new Date().toLocaleDateString('pt-BR')}</p>
+        <div class="actions">
+          <button class="btn btn-print" onclick="window.print()">🖨️ Imprimir</button>
+          <button class="btn btn-close" onclick="window.close()">✕ Fechar</button>
+        </div>
+        ${autoPrint ? '<script>window.onload=()=>window.print();<\/script>' : ''}
+      </body></html>
+    `);
+    printWindow.document.close();
+  };
+
   return (
     <div className="flex flex-col flex-1 bg-slate-50 p-6 overflow-y-auto">
       <div className="max-w-full mx-auto w-full space-y-6">
@@ -246,7 +350,7 @@ export const TrinksReconciliation: React.FC<Props> = ({ user, onBack, onShowCash
           <div className="flex items-center justify-between flex-wrap gap-4">
             <div className="flex items-center gap-3">
               <div>
-                <h1 className="text-2xl font-black text-slate-800">CAIXA</h1>
+                <h1 className="text-2xl font-black text-slate-800">RECEITAS</h1>
                 <p className="text-sm text-slate-500">Conciliação Trinks vs Lançamentos Manuais</p>
               </div>
             </div>
@@ -267,14 +371,18 @@ export const TrinksReconciliation: React.FC<Props> = ({ user, onBack, onShowCash
                   <option key={y} value={y}>{y}</option>,
                 )}
               </select>
-              {onShowCashBoxEntry && (
-                <button
-                  onClick={onShowCashBoxEntry}
-                  className="flex items-center gap-2 px-4 py-2 bg-slate-100 text-slate-700 rounded-lg text-sm font-semibold hover:bg-slate-200"
-                >
-                  Lançamentos
-                </button>
-              )}
+              <button
+                onClick={() => openPrintPreview(false)}
+                className="flex items-center gap-2 px-3 py-2 bg-slate-100 text-slate-700 rounded-lg text-sm font-semibold hover:bg-slate-200"
+              >
+                <Eye size={16} /> Visualizar
+              </button>
+              <button
+                onClick={() => openPrintPreview(true)}
+                className="flex items-center gap-2 px-3 py-2 bg-indigo-100 text-indigo-700 rounded-lg text-sm font-semibold hover:bg-indigo-200"
+              >
+                <Printer size={16} /> Imprimir
+              </button>
               {consumo != null && (
                 <div className={`flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-bold ${consumoBadgeColor}`} title={JSON.stringify(consumo, null, 2)}>
                   <span>API</span>
@@ -400,8 +508,12 @@ export const TrinksReconciliation: React.FC<Props> = ({ user, onBack, onShowCash
                                 <td className="px-2 py-2 text-right text-indigo-700 font-mono">
                                   {tv > 0 ? fmt(tv) : <span className="text-slate-300">—</span>}
                                 </td>
-                                <td className={`px-2 py-2 text-right font-mono ${cs === 'erro' ? 'text-red-600 font-bold' : cs === 'aviso' ? 'text-yellow-700' : 'text-slate-600'}`}>
-                                  {cv > 0 ? fmt(cv) : <span className="text-slate-300">—</span>}
+                                <td
+                                  className={`px-2 py-2 text-right font-mono cursor-pointer hover:bg-indigo-50 transition-colors ${cs === 'erro' ? 'text-red-600 font-bold' : cs === 'aviso' ? 'text-yellow-700' : 'text-slate-600'}`}
+                                  onClick={e => { e.stopPropagation(); openCaixaEditor(date, e); }}
+                                  title="Clique para lançar valor"
+                                >
+                                  {cv > 0 ? fmt(cv) : <span className="text-indigo-300 text-xs font-semibold">＋ lançar</span>}
                                 </td>
                               </React.Fragment>
                             );
