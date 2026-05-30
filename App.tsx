@@ -10,7 +10,6 @@ import { TeamManagement } from './TeamManagement';
 import { CompanyProfile } from './CompanyProfile';
 import { AccountManagement } from './AccountManagement';
 import { DRE } from './DRE';
-import { CashBoxReport } from './CashBoxReport';
 import { BankReconciliationComponent } from './BankReconciliationComponent';
 import { TrinksReconciliation } from './TrinksReconciliation';
 import { CaixaPequeno } from './CaixaPequeno';
@@ -2226,8 +2225,7 @@ const App: React.FC = () => {
             )}
             {view === 'accounts' && <AccountManagement accounts={accounts} setAccounts={setAccountsWithPersist} canManage={isEditor(currentUser.permissions?.accounts)} />}
             {view === 'dre' && <DRE bills={bills} revenues={revenues} accounts={accounts} setRevenues={setRevenuesWithPersist} />}
-            {view === 'cashbox' && <TrinksReconciliation user={currentUser} onBack={() => setView('dashboard')} onShowReport={() => setView('cashbox-report')} />}
-            {view === 'cashbox-report' && <CashBoxReport onBack={() => setView('cashbox')} canEdit={currentUser.permissions?.canEditCashBoxStatus} />}
+            {view === 'cashbox' && <TrinksReconciliation user={currentUser} onBack={() => setView('dashboard')} />}
             {view === 'reconciliation' && (
               <BankReconciliationComponent
                 user={currentUser}
