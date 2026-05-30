@@ -103,6 +103,29 @@ export const TrinksReconciliation: React.FC<Props> = ({ user, onBack, onShowRepo
       .sort((a, b) => a.date.localeCompare(b.date));
   };
 
+  // Inter: col[0]=Data, col[1]=Histórico ("Pix recebido"), col[3]=Valor (positivo=crédito)
+  const parseInterCSV = (text: string): { date: string; amount: number }[] => {
+    const lines = text.replace(/\r/g, '').replace(/^﻿/, '').split('\n');
+    const totals: Record<string, number> = {};
+    for (const line of lines) {
+      const cols = line.split(';');
+      if (cols.length < 4) continue;
+      const dateStr = cols[0].trim();
+      const historico = cols[1].trim().toLowerCase();
+      const amountStr = cols[3].trim();
+      if (!historico.includes('pix')) continue;
+      if (!/^\d{2}\/\d{2}\/\d{4}$/.test(dateStr)) continue;
+      const [dd, mm, yyyy] = dateStr.split('/');
+      const dateISO = `${yyyy}-${mm}-${dd}`;
+      const amount = parseFloat(amountStr.replace(/\./g, '').replace(',', '.')) || 0;
+      if (amount <= 0) continue; // só entradas
+      totals[dateISO] = (totals[dateISO] || 0) + amount;
+    }
+    return Object.entries(totals)
+      .map(([date, amount]) => ({ date, amount }))
+      .sort((a, b) => a.date.localeCompare(b.date));
+  };
+
   // PagBank: col[5]=Data da Venda, col[11]=Valor Bruto, col[12]=Valor Taxa, col[15]=Status
   const parsePagBankCSV = (text: string): { date: string; amount: number; taxa: number }[] => {
     const lines = text.replace(/\r/g, '').replace(/^﻿/, '').split('\n');
@@ -141,11 +164,16 @@ export const TrinksReconciliation: React.FC<Props> = ({ user, onBack, onShowRepo
       let parsed: { date: string; amount: number }[] = [];
       if (uploadProvider === 'pagSeg') {
         parsed = parsePagBankCSV(text);
+      } else if (uploadProvider === 'inter') {
+        parsed = parseInterCSV(text);
       } else {
         parsed = parseRedeCSV(text);
       }
-      // filtra só o mês selecionado
-      const filtered = parsed.filter(r => r.date.startsWith(mesISO));
+      // INTER: não filtra por mês (pode ter abril + maio no mesmo arquivo)
+      // outros provedores: filtra só o mês selecionado
+      const filtered = uploadProvider === 'inter'
+        ? parsed
+        : parsed.filter(r => r.date.startsWith(mesISO));
       if (filtered.length === 0) {
         const total = parsed.length;
         setUploadError(
@@ -909,36 +937,27 @@ export const TrinksReconciliation: React.FC<Props> = ({ user, onBack, onShowRepo
               </div>
 
               <div className="mb-4">
-                {uploadProvider === 'inter' ? (
-                  <div>
-                    <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Fonte dos dados</label>
-                    <button
-                      onClick={loadInterFromBankStatement}
-                      disabled={loadingBank}
-                      className="flex items-center gap-2 px-4 py-3 border-2 border-indigo-200 bg-indigo-50 rounded-xl text-sm text-indigo-700 font-semibold hover:bg-indigo-100 transition-colors w-full justify-center disabled:opacity-60"
-                    >
-                      🏦 {loadingBank ? 'Carregando extrato...' : 'Carregar PIX do Extrato Bancário'}
-                    </button>
-                    <p className="text-xs text-slate-400 mt-2">Busca PIX (créditos) do extrato Inter de {nomesMes[selectedMonth === 1 ? 11 : selectedMonth - 2]}/{selectedMonth === 1 ? selectedYear - 1 : selectedYear} e {nomesMes[selectedMonth - 1]}/{selectedYear}.</p>
-                  </div>
-                ) : (
-                  <div>
-                    <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Arquivo CSV</label>
-                    <input
-                      ref={uploadRef}
-                      type="file"
-                      accept=".csv,.txt,text/csv,text/plain,application/vnd.ms-excel"
-                      className="hidden"
-                      onChange={e => { const f = e.target.files?.[0]; if (f) handleUploadFile(f); e.target.value = ''; }}
-                    />
-                    <button
-                      onClick={() => uploadRef.current?.click()}
-                      className="flex items-center gap-2 px-4 py-3 border-2 border-dashed border-slate-300 rounded-xl text-sm text-slate-500 hover:border-indigo-400 hover:text-indigo-600 transition-colors w-full justify-center"
-                    >
-                      <Upload size={16} /> Selecionar arquivo CSV
-                    </button>
-                  </div>
-                )}
+                <div>
+                  <label className="block text-xs font-bold text-slate-500 uppercase mb-2">
+                    {uploadProvider === 'inter' ? 'Extrato Inter CSV (Pix recebido)' : 'Arquivo CSV'}
+                  </label>
+                  <input
+                    ref={uploadRef}
+                    type="file"
+                    accept=".csv,.txt,text/csv,text/plain,application/vnd.ms-excel"
+                    className="hidden"
+                    onChange={e => { const f = e.target.files?.[0]; if (f) handleUploadFile(f); e.target.value = ''; }}
+                  />
+                  <button
+                    onClick={() => uploadRef.current?.click()}
+                    className="flex items-center gap-2 px-4 py-3 border-2 border-dashed border-slate-300 rounded-xl text-sm text-slate-500 hover:border-indigo-400 hover:text-indigo-600 transition-colors w-full justify-center"
+                  >
+                    <Upload size={16} /> Selecionar arquivo CSV
+                  </button>
+                  {uploadProvider === 'inter' && (
+                    <p className="text-xs text-slate-400 mt-2">Use o extrato CSV do Inter — filtra automaticamente só as linhas "Pix recebido".</p>
+                  )}
+                </div>
                 {uploadError && <p className="text-xs text-red-500 font-medium mt-2">{uploadError}</p>}
               </div>
 
