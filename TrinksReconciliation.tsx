@@ -166,16 +166,23 @@ export const TrinksReconciliation: React.FC<Props> = ({ user, onBack, onShowRepo
     setUploadParsed([]);
     try {
       const statements = await listSavedBankReconciliations();
-      const monthStatement = statements.find(s => s.statementMonth === mesISO && s.isActiveVersion);
-      if (!monthStatement) {
-        setUploadError(`Nenhum extrato bancário importado para ${nomesMes[selectedMonth - 1]}/${selectedYear}. Importe primeiro na seção Extrato Bancário.`);
+      // Mês atual + mês anterior (ex: maio + abril)
+      const prevMonth = selectedMonth === 1 ? 12 : selectedMonth - 1;
+      const prevYear = selectedMonth === 1 ? selectedYear - 1 : selectedYear;
+      const prevMesISO = `${prevYear}-${String(prevMonth).padStart(2, '0')}`;
+      const relevant = statements.filter(s =>
+        s.isActiveVersion && (s.statementMonth === mesISO || s.statementMonth === prevMesISO)
+      );
+      if (relevant.length === 0) {
+        setUploadError(`Nenhum extrato bancário importado para ${nomesMes[prevMonth - 1]} ou ${nomesMes[selectedMonth - 1]}. Importe primeiro na seção Extrato Bancário.`);
         return;
       }
-      const pixCredits = monthStatement.transactions.filter(t =>
+      const allTransactions = relevant.flatMap(s => s.transactions);
+      const pixCredits = allTransactions.filter(t =>
         t.type === 'CREDIT' && t.description.toLowerCase().includes('pix')
       );
       if (pixCredits.length === 0) {
-        setUploadError('Nenhuma entrada de PIX encontrada no extrato deste mês.');
+        setUploadError('Nenhuma entrada de PIX encontrada nos extratos.');
         return;
       }
       const totals: Record<string, number> = {};
@@ -912,7 +919,7 @@ export const TrinksReconciliation: React.FC<Props> = ({ user, onBack, onShowRepo
                     >
                       🏦 {loadingBank ? 'Carregando extrato...' : 'Carregar PIX do Extrato Bancário'}
                     </button>
-                    <p className="text-xs text-slate-400 mt-2">Busca automaticamente as entradas de PIX do extrato Inter já importado neste mês.</p>
+                    <p className="text-xs text-slate-400 mt-2">Busca PIX (créditos) do extrato Inter de {nomesMes[selectedMonth === 1 ? 11 : selectedMonth - 2]}/{selectedMonth === 1 ? selectedYear - 1 : selectedYear} e {nomesMes[selectedMonth - 1]}/{selectedYear}.</p>
                   </div>
                 ) : (
                   <div>
